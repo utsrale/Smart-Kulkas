@@ -33,6 +33,44 @@ export default function LoginScreen() {
         }
     };
 
+    const handleGoogleLogin = async () => {
+        if (Platform.OS !== 'web') {
+            Alert.alert("Perhatian", "Login Google via Aplikasi Native memerlukan konfigurasi tambahan Google Sign-In SDK. Untuk saat ini hanya tersedia di Web.");
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+            const provider = new GoogleAuthProvider();
+            await signInWithPopup(auth as any, provider);
+        } catch (error: any) {
+            console.error(error);
+            Alert.alert('Login Google Gagal', error.message || 'Terjadi kesalahan');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleAppleLogin = async () => {
+        if (Platform.OS !== 'web') {
+            Alert.alert("Perhatian", "Login Apple via Aplikasi Native memerlukan Apple Developer Account. Untuk saat ini hanya tersedia di Web.");
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const { OAuthProvider, signInWithPopup } = await import('firebase/auth');
+            const provider = new OAuthProvider('apple.com');
+            await signInWithPopup(auth as any, provider);
+        } catch (error: any) {
+            console.error(error);
+            Alert.alert('Login Apple Gagal', error.message || 'Terjadi kesalahan');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -129,11 +167,8 @@ export default function LoginScreen() {
 
                         {/* Social Buttons */}
                         <View style={styles.socialRow}>
-                            <TouchableOpacity style={styles.socialBtn}>
+                            <TouchableOpacity style={styles.socialBtn} onPress={handleGoogleLogin}>
                                 <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#ea4335' }}>G</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.socialBtn}>
-                                <IconSymbol name="applelogo" size={20} color="#0f172a" />
                             </TouchableOpacity>
                         </View>
 

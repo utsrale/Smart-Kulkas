@@ -1,9 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { signOut } from 'firebase/auth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert, ScrollView,
+    Alert, Platform, ScrollView,
     StyleSheet,
     Text, TouchableOpacity,
     View,
@@ -13,6 +14,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 
 export default function ProfileScreen() {
     const { user } = useAuth();
+    const router = useRouter();
     const [stats, setStats] = useState({ active: 0, used: 0, expired: 0 });
 
     useEffect(() => {
@@ -47,25 +49,38 @@ export default function ProfileScreen() {
         return () => unsubscribe();
     }, [user]);
 
-    const handleLogout = () => {
-        Alert.alert(
-            'Keluar',
-            'Apakah Anda yakin ingin keluar dari akun?',
-            [
-                { text: 'Batal', style: 'cancel' },
-                {
-                    text: 'Keluar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await signOut(auth);
-                        } catch (error) {
-                            Alert.alert('Error', 'Gagal keluar. Coba lagi.');
-                        }
+    const handleLogout = async () => {
+        if (Platform.OS === 'web') {
+            const confirmLogout = window.confirm('Apakah Anda yakin ingin keluar dari akun?');
+            if (confirmLogout) {
+                try {
+                    await signOut(auth);
+                    router.replace('/(auth)/login');
+                } catch (error) {
+                    window.alert('Gagal keluar. Coba lagi.');
+                }
+            }
+        } else {
+            Alert.alert(
+                'Keluar',
+                'Apakah Anda yakin ingin keluar dari akun?',
+                [
+                    { text: 'Batal', style: 'cancel' },
+                    {
+                        text: 'Keluar',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await signOut(auth);
+                                router.replace('/(auth)/login');
+                            } catch (error) {
+                                Alert.alert('Error', 'Gagal keluar. Coba lagi.');
+                            }
+                        },
                     },
-                },
-            ]
-        );
+                ]
+            );
+        }
     };
 
     return (
