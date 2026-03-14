@@ -133,28 +133,7 @@ export default function AddItemScreen() {
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-                {/* Quick Capture */}
-                <Text style={styles.sectionTitle}>Quick Capture</Text>
-                <View style={styles.captureRow}>
-                    <TouchableOpacity style={styles.captureCard} onPress={() => Alert.alert("Scan Barcode", "Fitur ini akan ditambahkan di Versi 2.")}>
-                        <View style={[styles.captureIconBg, { backgroundColor: '#e8f8f5' }]}>
-                            <IconSymbol name="barcode.viewfinder" size={28} color="#2ecc71" />
-                        </View>
-                        <Text style={styles.captureText}>Scan Barcode</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.captureCard} onPress={() => Alert.alert("Scan Receipt", "Fitur OCR Struk akan ditambahkan di Versi 2.")}>
-                        <View style={[styles.captureIconBg, { backgroundColor: '#e8f8f5' }]}>
-                            <IconSymbol name="doc.text.viewfinder" size={28} color="#2ecc71" />
-                        </View>
-                        <Text style={styles.captureText}>Scan Receipt</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.dividerBox}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or add manually</Text>
-                    <View style={styles.dividerLine} />
-                </View>
+                {/* Form Fields - Removed Quick Capture for cleaner layout */}
 
                 {/* Form Fields */}
                 <Text style={styles.label}>Item Name</Text>
