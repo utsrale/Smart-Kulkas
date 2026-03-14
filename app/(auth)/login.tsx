@@ -21,7 +21,7 @@ export default function LoginScreen() {
         setIsLoading(true);
         try {
             await signInWithEmailAndPassword(auth as any, email, password);
-            // Navigation is handled by layout observer
+            router.replace('/(tabs)');
         } catch (error: any) {
             let errorMessage = 'Gagal login. Silakan coba lagi.';
             if (error.code === 'auth/invalid-email') errorMessage = 'Format email tidak valid.';
@@ -44,6 +44,7 @@ export default function LoginScreen() {
             const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
             const provider = new GoogleAuthProvider();
             await signInWithPopup(auth as any, provider);
+            router.replace('/(tabs)');
         } catch (error: any) {
             console.error(error);
             Alert.alert('Login Google Gagal', error.message || 'Terjadi kesalahan');
