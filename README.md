@@ -19,7 +19,8 @@ A modern, intelligent inventory management application built to help you track y
 
 ## 🚀 Live Demo
 
-The web version of this application is deployed and can be customized via Vercel.
+Try the application live directly from your browser:
+**[https://smart-kulkas.vercel.app](https://smart-kulkas.vercel.app)**
 
 ## 🛠️ Installation & Setup (Local Development)
 
