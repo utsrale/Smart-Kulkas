@@ -141,7 +141,27 @@ export default function LoginScreen() {
                             </View>
 
                             <View style={styles.forgotBtn}>
-                                <TouchableOpacity>
+                                <TouchableOpacity onPress={async () => {
+                                    const resetEmail = Platform.OS === 'web'
+                                        ? window.prompt('Masukkan email Anda untuk reset password:')
+                                        : email;
+                                    if (!resetEmail) {
+                                        if (Platform.OS !== 'web') Alert.alert('Error', 'Masukkan email Anda di kolom email terlebih dahulu.');
+                                        return;
+                                    }
+                                    try {
+                                        const { sendPasswordResetEmail } = await import('firebase/auth');
+                                        await sendPasswordResetEmail(auth as any, resetEmail);
+                                        if (Platform.OS === 'web') {
+                                            window.alert('Link reset password telah dikirim ke ' + resetEmail + '. Silakan cek inbox email Anda.');
+                                        } else {
+                                            Alert.alert('Berhasil', 'Link reset password telah dikirim ke ' + resetEmail + '. Silakan cek inbox email Anda.');
+                                        }
+                                    } catch (error: any) {
+                                        const msg = error.code === 'auth/user-not-found' ? 'Email tidak terdaftar.' : 'Gagal mengirim reset password. Coba lagi.';
+                                        if (Platform.OS === 'web') { window.alert(msg); } else { Alert.alert('Error', msg); }
+                                    }
+                                }}>
                                     <Text style={styles.forgotText}>Forgot Password?</Text>
                                 </TouchableOpacity>
                             </View>

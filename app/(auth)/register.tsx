@@ -169,9 +169,6 @@ export default function RegisterScreen() {
                             <TouchableOpacity style={styles.socialBtn}>
                                 <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#ea4335' }}>G</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.socialBtn}>
-                                <IconSymbol name="applelogo" size={20} color="#0f172a" />
-                            </TouchableOpacity>
                         </View>
 
                         {/* Sign In Footer */}
