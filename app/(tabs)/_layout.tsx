@@ -10,6 +10,9 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const router = useRouter();
 
+  const tabBarHeight = Platform.OS === 'ios' ? 85 : Platform.OS === 'web' ? 70 : 65;
+  const tabBarPaddingBottom = Platform.OS === 'ios' ? 25 : Platform.OS === 'web' ? 12 : 10;
+
   return (
     <View style={styles.container}>
       <Tabs
@@ -26,9 +29,10 @@ export default function TabLayout() {
             shadowOffset: { width: 0, height: -3 },
             shadowRadius: 10,
             backgroundColor: '#fff',
-            height: Platform.OS === 'ios' ? 85 : 65,
-            paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+            height: tabBarHeight,
+            paddingBottom: tabBarPaddingBottom,
             paddingTop: 10,
+            ...(Platform.OS === 'web' ? { position: 'fixed' as any, bottom: 0, left: 0, right: 0, zIndex: 999 } : {}),
           }
         }}>
         <Tabs.Screen
@@ -74,5 +78,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    ...(Platform.OS === 'web' ? { height: '100vh' as any, overflow: 'hidden' as any } : {}),
   },
 });
