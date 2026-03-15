@@ -23,9 +23,9 @@ export default function RecipeDetailScreen() {
             const recipeData = JSON.parse(params.recipe as string) as RecipeSuggestion;
             setRecipe(recipeData);
 
-            // Generate a placeholder image URL using a free service
-            const keyword = encodeURIComponent(recipeData.imageKeyword || recipeData.title);
-            setHeroImageUrl(`https://source.unsplash.com/800x600/?${keyword},food`);
+            // Generate a placeholder AI image using Pollinations AI (free, no API key required)
+            const keyword = encodeURIComponent((recipeData.imageKeyword || recipeData.title) + " food delicious plated high quality");
+            setHeroImageUrl(`https://image.pollinations.ai/prompt/${keyword}?width=800&height=600&nologo=true`);
         } catch (e) {
             console.error('Failed to parse recipe data:', e);
         }
