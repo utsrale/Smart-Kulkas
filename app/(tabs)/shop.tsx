@@ -1,7 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../src/config/firebase';
 import { useAuth } from '../../src/contexts/AuthContext';
 
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     emptyPersonal: { paddingVertical: 20, alignItems: 'center' },
     emptyText: { fontSize: 13, color: '#94a3b8', textAlign: 'center' },
 
-    fabContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 20, paddingTop: 16, backgroundColor: '#f6f8f7' },
+    fabContainer: { position: 'absolute', bottom: Platform.OS === 'web' ? 80 : 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 20, paddingTop: 16, backgroundColor: '#f6f8f7' },
     fabButton: { flexDirection: 'row', backgroundColor: '#13ec6d', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 8, shadowColor: '#13ec6d', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6 },
     fabText: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
     fabHint: { textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 8 },

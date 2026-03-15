@@ -50,7 +50,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'barcode.viewfinder': 'qr-code-scanner',
   'doc.text.viewfinder': 'document-scanner',
   'calendar': 'calendar-today',
-  'chart.bar.fill': 'bar-chart',
+  'chart.bar.fill': 'equalizer',
   'fork.knife': 'restaurant',
   'egg.fill': 'egg',
   'bag.fill': 'bakery-dining',
