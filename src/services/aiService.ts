@@ -67,8 +67,74 @@ const callOpenRouter = async (prompt: string, systemPrompt?: string): Promise<st
     const data = await response.json();
     let text = data.choices?.[0]?.message?.content || "";
     // Clean potential markdown code blocks
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     console.log("[OpenRouter] ✅ Success! Response length:", text.length);
+    return text;
+};
+
+/**
+ * Robust JSON extractor — finds the first valid JSON object or array
+ * from a messy AI response that might contain extra conversational text.
+ */
+const extractJSON = (text: string): string => {
+    // First, clean markdown code blocks
+    text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    
+    // Remove illegal control characters (keep newline, carriage return, tab)
+    text = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "");
+
+    // Try direct parse first
+    try {
+        JSON.parse(text);
+        return text;
+    } catch {}
+
+    // Find the first [ or { and extract the matching block
+    const startArray = text.indexOf('[');
+    const startObject = text.indexOf('{');
+    
+    let startIdx = -1;
+    let openChar = '';
+    let closeChar = '';
+
+    if (startArray === -1 && startObject === -1) return text;
+    if (startArray === -1) { startIdx = startObject; openChar = '{'; closeChar = '}'; }
+    else if (startObject === -1) { startIdx = startArray; openChar = '['; closeChar = ']'; }
+    else if (startArray < startObject) { startIdx = startArray; openChar = '['; closeChar = ']'; }
+    else { startIdx = startObject; openChar = '{'; closeChar = '}'; }
+
+    // Bracket-match to find the end
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = startIdx; i < text.length; i++) {
+        const ch = text[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === openChar) depth++;
+        if (ch === closeChar) depth--;
+        if (depth === 0) {
+            const extracted = text.substring(startIdx, i + 1);
+            try {
+                JSON.parse(extracted);
+                return extracted;
+            } catch {}
+            break;
+        }
+    }
+
+    // Last resort: try substring from first [ to last ] (or { to })
+    const lastClose = text.lastIndexOf(closeChar);
+    if (startIdx >= 0 && lastClose > startIdx) {
+        const crude = text.substring(startIdx, lastClose + 1);
+        try {
+            JSON.parse(crude);
+            return crude;
+        } catch {}
+    }
+
     return text;
 };
 
@@ -101,7 +167,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
             const result = await model.generateContent(prompt);
             const response = await result.response;
             let text = response.text();
-            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            text = extractJSON(text);
             const parsed = JSON.parse(text) as PredictionResult;
             return {
                 categoryKey: parsed.categoryKey || 'lainnya',
@@ -119,7 +185,8 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
     try {
         console.log("[OpenRouter] 🔄 Fallback for prediction:", itemName);
         const text = await callOpenRouter(prompt, systemPrompt);
-        const parsed = JSON.parse(text) as PredictionResult;
+        const cleanedText = extractJSON(text);
+        const parsed = JSON.parse(cleanedText) as PredictionResult;
         return {
             categoryKey: parsed.categoryKey || 'lainnya',
             shelfLifeDays: parsed.shelfLifeDays || 7,
@@ -168,7 +235,8 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
 `;
 
     const parseRecipes = (text: string, prefix: string): RecipeSuggestion[] => {
-        const parsed = JSON.parse(text) as any[];
+        const cleaned = extractJSON(text);
+        const parsed = JSON.parse(cleaned) as any[];
         return parsed.map((item, index) => ({
             id: `${prefix}-${Date.now()}-${index}`,
             title: item.title || "Resep Tanpa Nama",
@@ -192,7 +260,7 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
             const result = await model.generateContent(prompt);
             const response = await result.response;
             let text = response.text();
-            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            text = extractJSON(text);
             return parseRecipes(text, "recipe");
         } catch (geminiError: any) {
             console.warn("[Gemini] ⚠️ Failed:", geminiError.message?.substring(0, 100));
