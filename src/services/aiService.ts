@@ -3,7 +3,8 @@ import { Platform } from "react-native";
 
 /**
  * AI Service for Smart Inventory Kulkas
- * Providing intelligent predictions for item categories and shelf life.
+ * Primary: Gemini AI (Google) — Free tier
+ * Backup:  OpenRouter (nvidia/nemotron-nano-9b-v2:free)
  */
 
 export interface PredictionResult {
@@ -27,114 +28,149 @@ export interface RecipeSuggestion {
     instructions: string[];
 }
 
-// Access the API Key from environment variables
+// ─── API Keys ───────────────────────────────────────────────
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
+const OPENROUTER_API_KEY = "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";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+// ─── OpenRouter Fallback Helper ─────────────────────────────
 /**
- * Predicts item details based on the item name using Real Gemini AI API.
+ * Calls OpenRouter as a fallback when Gemini is exhausted or fails.
+ * Uses nvidia/nemotron-nano-9b-v2:free (tested & confirmed working).
+ */
+const callOpenRouter = async (prompt: string, systemPrompt?: string): Promise<string> => {
+    const messages: { role: string; content: string }[] = [];
+    if (systemPrompt) {
+        messages.push({ role: "system", content: systemPrompt });
+    }
+    messages.push({ role: "user", content: prompt });
+
+    console.log("[OpenRouter] 🔄 Sending request to nvidia/nemotron-nano-9b-v2:free...");
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            "model": "nvidia/nemotron-nano-9b-v2:free",
+            "messages": messages
+        })
+    });
+
+    if (!response.ok) {
+        const errBody = await response.text();
+        console.error("[OpenRouter] ❌ API Error:", response.status, errBody);
+        throw new Error(`OpenRouter Error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    let text = data.choices?.[0]?.message?.content || "";
+    // Clean potential markdown code blocks
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    console.log("[OpenRouter] ✅ Success! Response length:", text.length);
+    return text;
+};
+
+// ─── 1. Predict Item Details ────────────────────────────────
+/**
+ * Predicts item category & shelf life. Tries Gemini first, then OpenRouter.
  */
 export const predictItemDetails = async (itemName: string): Promise<PredictionResult | null> => {
     if (!itemName || itemName.length < 3) return null;
 
-    if (!API_KEY || API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
-        console.warn("[Gemini AI] API Key is missing. Please set EXPO_PUBLIC_GEMINI_API_KEY in .env");
-        if (Platform.OS === 'web') alert("API Key Gemini belum diset. Silakan isi file .env");
-        return null;
+    const systemPrompt = "You are a smart refrigerator assistant. Output ONLY valid JSON without any additional text or markdown.";
+    const prompt = `
+A user added an item named "${itemName}".
+Predict the food category and how many days it will last in a standard refrigerator.
+
+Output MUST be a valid JSON object with the following fields:
+- categoryKey: One of [sayur, buah, daging, ikan, susu, telur, bumbu, minuman, lainnya]
+- shelfLifeDays: Integer (number of days it lasts)
+- confidence: Float (e.g. 0.9)
+- reason: A short explanation in Indonesian (e.g., "Susu UHT tahan lama karena proses sterilisasi.").
+
+Respond only with JSON. Do NOT wrap with markdown blocks.
+`;
+
+    // --- Try Gemini first ---
+    if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
+        try {
+            console.log("[Gemini] Predicting item details for:", itemName);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            let text = response.text();
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            const parsed = JSON.parse(text) as PredictionResult;
+            return {
+                categoryKey: parsed.categoryKey || 'lainnya',
+                shelfLifeDays: parsed.shelfLifeDays || 7,
+                confidence: parsed.confidence || 0.8,
+                reason: parsed.reason || "Berdasarkan analisis AI Gemini."
+            };
+        } catch (geminiError: any) {
+            console.warn("[Gemini] ⚠️ Failed:", geminiError.message?.substring(0, 100));
+            // Fall through to OpenRouter backup below
+        }
     }
 
+    // --- Fallback: OpenRouter ---
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        const prompt = `
-      You are a smart refrigerator assistant. A user added an item named "${itemName}".
-      Predict the food category and how many days it will last in a standard refrigerator.
-      
-      Output MUST be a valid JSON object with the following fields:
-      - categoryKey: One of [sayur, buah, daging, ikan, susu, telur, bumbu, minuman, lainnya]
-      - shelfLifeDays: Integer (number of days it lasts)
-      - confidence: Float (e.g. 0.9)
-      - reason: A short explanation in Indonesian (e.g., "Susu UHT tahan lama karena proses sterilisasi.").
-      
-      Respond only with JSON. Do NOT wrap with markdown blocks.
-    `;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let text = response.text();
-
-        // Clean potential markdown code blocks from response
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
+        console.log("[OpenRouter] 🔄 Fallback for prediction:", itemName);
+        const text = await callOpenRouter(prompt, systemPrompt);
         const parsed = JSON.parse(text) as PredictionResult;
-
         return {
             categoryKey: parsed.categoryKey || 'lainnya',
             shelfLifeDays: parsed.shelfLifeDays || 7,
             confidence: parsed.confidence || 0.8,
-            reason: parsed.reason || "Berdasarkan analisis AI Gemini."
+            reason: parsed.reason || "Berdasarkan analisis AI (Backup)."
         };
-    } catch (error: any) {
-        console.error("[Gemini AI] Error:", error);
-        if (Platform.OS === 'web') {
-            alert(`Gemini AI Error: ${error.message || "Gagal memproses prediksi."}`);
-        }
+    } catch (fallbackError: any) {
+        console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
         return {
             categoryKey: 'lainnya',
             shelfLifeDays: 7,
             confidence: 0.1,
-            reason: `Gagal koneksi ke Gemini AI: ${error.message}`
+            reason: "AI sedang tidak tersedia. Silakan coba lagi nanti."
         };
     }
 };
 
+// ─── 2. Generate Recipes ────────────────────────────────────
 /**
- * Generates recipe suggestions based on a list of ingredients.
+ * Generates recipe suggestions. Tries Gemini first, then OpenRouter.
  */
 export const generateRecipes = async (ingredients: string[]): Promise<RecipeSuggestion[]> => {
     if (!ingredients || ingredients.length === 0) return [];
 
-    if (!API_KEY || API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
-        console.warn("[Gemini AI] API Key is missing. Cannot generate recipes.");
-        return [];
-    }
+    const systemPrompt = "Anda adalah koki profesional bintang lima. Anda hanya merespons menggunakan JSON array valid tanpa markdown block.";
+    const prompt = `
+Anda adalah koki profesional bintang lima. Saya memiliki bahan-bahan masakan berikut di kulkas saya:
+${ingredients.join(", ")}
 
-    try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+Berikan saya tepat 3 ide resep masakan enak berbahasa Indonesia yang utama menggunakan bahan-bahan tersebut. 
+Anda diizinkan untuk menambahkan bumbu/bahan pelengkap umum lainnya (seperti garam, gula, bawang, minyak, saus, dll) yang mungkin tidak saya sebutkan, agar masakan menjadi sempurna.
 
-        const prompt = `
-      Anda adalah koki profesional bintang lima. Saya memiliki bahan-bahan masakan berikut di kulkas saya:
-      ${ingredients.join(", ")}
-      
-      Berikan saya tepat 3 ide resep masakan enak berbahasa Indonesia yang utama menggunakan bahan-bahan tersebut. 
-      Anda diizinkan untuk menambahkan bumbu/bahan pelengkap umum lainnya (seperti garam, gula, bawang, minyak, saus, dll) yang mungkin tidak saya sebutkan, agar masakan menjadi sempurna.
-      
-      Output MUST be a strictly valid JSON ARRAY of objects. Each object MUST have these properties:
-      - title: String (Nama masakan dalam Bahasa Indonesia)
-      - description: String (1 kalimat deskripsi menarik)
-      - prepTime: String (Estimasi waktu, contoh: "30 Menit")
-      - difficulty: String (Easy / Medium / Hard)
-      - calories: String (Estimasi kalori per porsi, contoh: "450 kcal")
-      - imageKeyword: String (2-3 kata kunci dalam Bahasa Inggris untuk menggambarkan hidangan ini, contoh: "fried rice plate")
-      - fridgeIngredients: Array of objects {name: String, amount: String} (bahan yang diambil dari daftar kulkas saya)
-      - pantryStaples: Array of Strings (bumbu/bahan umum tambahan yang Anda sarankan, contoh: "Garam secukupnya")
-      - ingredients: Array of Strings (SEMUA bahan lengkap)
-      - instructions: Array of Strings (Langkah-langkah memasak yang ringkas namun jelas)
-      
-      Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
-    `;
+Output MUST be a strictly valid JSON ARRAY of objects. Each object MUST have these properties:
+- title: String (Nama masakan dalam Bahasa Indonesia)
+- description: String (1 kalimat deskripsi menarik)
+- prepTime: String (Estimasi waktu, contoh: "30 Menit")
+- difficulty: String (Easy / Medium / Hard)
+- calories: String (Estimasi kalori per porsi, contoh: "450 kcal")
+- imageKeyword: String (2-3 kata kunci dalam Bahasa Inggris untuk menggambarkan hidangan ini, contoh: "fried rice plate")
+- fridgeIngredients: Array of objects {name: String, amount: String} (bahan yang diambil dari daftar kulkas saya)
+- pantryStaples: Array of Strings (bumbu/bahan umum tambahan yang Anda sarankan, contoh: "Garam secukupnya")
+- ingredients: Array of Strings (SEMUA bahan lengkap)
+- instructions: Array of Strings (Langkah-langkah memasak yang ringkas namun jelas)
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let text = response.text();
+Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
+`;
 
-        // Clean potential markdown code blocks from response
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
+    const parseRecipes = (text: string, prefix: string): RecipeSuggestion[] => {
         const parsed = JSON.parse(text) as any[];
-
         return parsed.map((item, index) => ({
-            id: `recipe-${Date.now()}-${index}`,
+            id: `${prefix}-${Date.now()}-${index}`,
             title: item.title || "Resep Tanpa Nama",
             description: item.description || "",
             prepTime: item.prepTime || "-",
@@ -146,43 +182,76 @@ export const generateRecipes = async (ingredients: string[]): Promise<RecipeSugg
             ingredients: item.ingredients || [],
             instructions: item.instructions || []
         }));
+    };
 
-    } catch (error: any) {
-        console.error("[Gemini AI] Error generating recipes:", error);
-        return [];
+    // --- Try Gemini first ---
+    if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
+        try {
+            console.log("[Gemini] Generating recipes...");
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            let text = response.text();
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            return parseRecipes(text, "recipe");
+        } catch (geminiError: any) {
+            console.warn("[Gemini] ⚠️ Failed:", geminiError.message?.substring(0, 100));
+            // Fall through to OpenRouter backup below
+        }
+    }
+
+    // --- Fallback: OpenRouter ---
+    try {
+        console.log("[OpenRouter] 🔄 Fallback for recipes...");
+        const text = await callOpenRouter(prompt, systemPrompt);
+        return parseRecipes(text, "recipe-backup");
+    } catch (fallbackError: any) {
+        console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
+        throw new Error("Gagal mendapatkan resep dari kedua server AI. Silakan coba lagi nanti. 👨‍🍳");
     }
 };
 
+// ─── 3. Sustainability Tips ─────────────────────────────────
 /**
- * Generates a smart sustainability tip based on user's wasted and consumed items.
+ * Generates a smart sustainability tip. Tries Gemini first, then OpenRouter.
  */
 export const generateSustainabilityTips = async (wastedItems: string[], consumedItems: string[]): Promise<string> => {
-    if (!API_KEY || API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
-        return "Beli bahan dalam jumlah kecil tapi sering, daripada membeli banyak sekaligus.";
+    const systemPrompt = "Anda adalah pakar lingkungan dan food waste reduction yang handal. Berikan tips singkat dan praktis dalam Bahasa Indonesia.";
+    const prompt = `
+Pengguna aplikasi Smart Fridge ini baru saja membuang bahan-bahan berikut (karena kedaluwarsa): ${wastedItems.length > 0 ? wastedItems.join(", ") : "Tidak ada!"}
+Dan mereka berhasil menghabiskan bahan-bahan berikut sebelum kedaluwarsa: ${consumedItems.length > 0 ? consumedItems.join(", ") : "Belum ada data."}
+
+Berikan TEPAT SATU kalimat tips atau motivasi (maksimal 2 kalimat singkat) dalam Bahasa Indonesia yang:
+- Sangat spesifik dan relevan dengan bahan yang mereka buang (jika ada).
+- Memberikan pujian jika mereka tidak membuang banyak barang.
+- Praktis dan bisa langsung diterapkan di dapur (misalnya cara menyimpan bahan tertentu agar lebih awet).
+
+Jangan gunakan format list, markdown, atau pembukaan/penutup doa/salam. Cukup langsung berikan tipsnya.
+`;
+
+    const defaultTip = "Letakkan bahan baru di bagian belakang kulkas (Metode First In, First Out) agar bahan lama terpakai lebih dulu!";
+
+    // --- Try Gemini first ---
+    if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
+        try {
+            console.log("[Gemini] Generating sustainability tips...");
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            return response.text().trim().replace(/['"]/g, '');
+        } catch (geminiError: any) {
+            console.warn("[Gemini] ⚠️ Tips failed:", geminiError.message?.substring(0, 100));
+            // Fall through to OpenRouter backup below
+        }
     }
 
+    // --- Fallback: OpenRouter ---
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        const prompt = `
-      Anda adalah pakar lingkungan dan food waste reduction. 
-      Pengguna aplikasi Smart Fridge ini baru saja membuang bahan-bahan berikut (karena kedaluwarsa): ${wastedItems.length > 0 ? wastedItems.join(", ") : "Tidak ada!"}
-      Dan mereka berhasil menghabiskan bahan-bahan berikut sebelum kedaluwarsa: ${consumedItems.length > 0 ? consumedItems.join(", ") : "Belum ada data."}
-      
-      Berikan TEPAT SATU kalimat tips atau motivasi (maksimal 2 kalimat singkat) dalam Bahasa Indonesia yang:
-      - Sangat spesifik dan relevan dengan bahan yang mereka buang (jika ada).
-      - Memberikan pujian jika mereka tidak membuang banyak barang.
-      - Praktis dan bisa langsung diterapkan di dapur (misalnya cara menyimpan bahan tertentu agar lebih awet).
-      
-      Jangan gunakan format list, markdown, atau pembukaan/penutup doa/salam. Cukup langsung berikan tipsnya.
-    `;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text().trim().replace(/['"]/g, '');
-
-    } catch (error: any) {
-        console.error("[Gemini AI] Error generating tips:", error);
-        return "Letakkan bahan baru di bagian belakang kulkas (Metode First In, First Out) agar bahan lama terpakai lebih dulu!";
+        console.log("[OpenRouter] 🔄 Fallback for sustainability tips...");
+        const text = await callOpenRouter(prompt, systemPrompt);
+        return text.replace(/['"]/g, '');
+    } catch (fallbackError: any) {
+        console.error("[OpenRouter] ❌ Tips backup also failed:", fallbackError.message);
+        return defaultTip;
     }
 };

@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../src/config/firebase';
 import { useAuth } from '../src/contexts/AuthContext';
 import { RecipeSuggestion } from '../src/services/aiService';
@@ -16,36 +16,11 @@ export default function RecipeDetailScreen() {
     const [checkedFridge, setCheckedFridge] = useState<Set<number>>(new Set());
     const [checkedPantry, setCheckedPantry] = useState<Set<number>>(new Set());
     const [isFinishing, setIsFinishing] = useState(false);
-    const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
 
     useEffect(() => {
         try {
             const recipeData = JSON.parse(params.recipe as string) as RecipeSuggestion;
             setRecipe(recipeData);
-
-            // Use a curated list of premium food images that never fail CORS and look amazing
-            const foodImages = [
-                "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=80",
-                "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80",
-                "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80",
-                "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=800&q=80",
-                "https://images.unsplash.com/photo-1494390248081-4e521a5940db?w=800&q=80",
-                "https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?w=800&q=80",
-                "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=800&q=80",
-                "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80",
-                "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&q=80",
-                "https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=800&q=80"
-            ];
-            
-            // Pick a consistent image based on the title's length and character codes
-            let hash = 0;
-            const title = recipeData.title || "recipe";
-            for (let i = 0; i < title.length; i++) {
-                hash = title.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const imgIndex = Math.abs(hash) % foodImages.length;
-            
-            setHeroImageUrl(foodImages[imgIndex]);
         } catch (e) {
             console.error('Failed to parse recipe data:', e);
         }
@@ -151,17 +126,6 @@ export default function RecipeDetailScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Hero Image */}
-                <View style={styles.heroContainer}>
-                    {heroImageUrl && (
-                        <Image
-                            source={{ uri: heroImageUrl }}
-                            style={styles.heroImage}
-                            resizeMode="cover"
-                        />
-                    )}
-                    <View style={styles.heroOverlay} />
-                </View>
 
                 {/* Title & Meta */}
                 <View style={styles.titleSection}>
@@ -292,10 +256,6 @@ const styles = StyleSheet.create({
 
     scrollContent: { paddingBottom: 20 },
 
-    // Hero
-    heroContainer: { width: '100%', height: 240, backgroundColor: '#e2e8f0', overflow: 'hidden' },
-    heroImage: { width: '100%', height: '100%' },
-    heroOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, backgroundColor: 'transparent' },
 
     // Title Section
     titleSection: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
