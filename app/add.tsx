@@ -1,14 +1,15 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRouter } from 'expo-router';
-import { addDoc, collection, limit, onSnapshot, query, orderBy, Timestamp, where } from 'firebase/firestore';
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
-    Text, TextInput, TouchableOpacity,
+    Text, TextInput,
     useWindowDimensions,
     View
 } from 'react-native';
@@ -16,7 +17,6 @@ import { auth, db } from '../src/config/firebase';
 import { IS_DEMO_MODE, useAuth } from '../src/contexts/AuthContext';
 import { predictItemDetails } from '../src/services/aiService';
 import { CATEGORIES, CATEGORY_KEYS, getDefaultExpDate } from '../src/utils/categoryDefaults';
-import { scheduleExpiryNotification } from '../src/utils/notifications';
 
 export default function AddItemScreen() {
     const { user } = useAuth();
@@ -28,13 +28,10 @@ export default function AddItemScreen() {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [expiredDate, setExpiredDate] = useState<Date | null>(null);
-    const isSmartPrediction = true;
     const [isLoading, setIsLoading] = useState(false);
     const [isAiPredicting, setIsAiPredicting] = useState(false);
-    const [aiConfidence, setAiConfidence] = useState(0);
     const [aiReason, setAiReason] = useState('');
     const [predictedShelfLife, setPredictedShelfLife] = useState<number | null>(null);
-    const [recentItems, setRecentItems] = useState<any[]>([]);
 
     const handleCategorySelect = (key: string) => {
         setSelectedCategory(key);
@@ -42,24 +39,34 @@ export default function AddItemScreen() {
     };
 
     const formatDate = (date: Date | null) => {
-        if (!date) return 'Oct 28, 2023';
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        if (!date) return '-';
+        return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    // Format date for HTML date input (YYYY-MM-DD)
+    const formatDateForInput = (date: Date | null) => {
+        if (!date) return '';
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     };
 
     // AI Prediction Logic
     useEffect(() => {
-        if (!isSmartPrediction || itemName.length < 3) return;
+        if (itemName.length < 3) return;
 
         const timer = setTimeout(async () => {
             setIsAiPredicting(true);
             try {
                 const result = await predictItemDetails(itemName);
-                if (result && isSmartPrediction) {
-                    setSelectedCategory(result.categoryKey);
+                if (result) {
+                    // Only use AI category if it's a valid key
+                    const catKey = CATEGORIES[result.categoryKey] ? result.categoryKey : 'lainnya';
+                    setSelectedCategory(catKey);
                     const date = new Date();
                     date.setDate(date.getDate() + result.shelfLifeDays);
                     setExpiredDate(date);
-                    setAiConfidence(result.confidence);
                     setAiReason(result.reason || '');
                     setPredictedShelfLife(result.shelfLifeDays);
                 }
@@ -71,55 +78,30 @@ export default function AddItemScreen() {
         }, 1000);
 
         return () => clearTimeout(timer);
-    }, [itemName, isSmartPrediction]);
-
-    // Fetch Recent Items
-    useEffect(() => {
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) return;
-
-        const q = query(
-            collection(db, 'inventory'),
-            where('userId', '==', uid),
-            orderBy('addedDate', 'desc'),
-            limit(5)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const items = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setRecentItems(items);
-        });
-
-        return () => unsubscribe();
-    }, [user]);
+    }, [itemName]);
 
     const handleSubmit = async () => {
+        console.log("[AddItem] handleSubmit called", { itemName, selectedCategory, expiredDate, quantity });
+
         if (!itemName.trim()) {
-            Alert.alert('Error', 'Please enter item name.');
+            Alert.alert('Error', 'Masukkan nama barang.');
             return;
         }
         if (!selectedCategory) {
-            Alert.alert('Error', 'Please select a category.');
+            Alert.alert('Error', 'Pilih kategori barang.');
             return;
         }
         if (!expiredDate) {
-            Alert.alert('Error', 'Please set an expiry date.');
+            Alert.alert('Error', 'Tanggal kedaluwarsa belum diatur.');
             return;
         }
 
         setIsLoading(true);
 
         if (IS_DEMO_MODE) {
-            scheduleExpiryNotification(itemName, 2);
             setTimeout(() => {
-                Alert.alert('Success! ✅', `${itemName} has been added.`);
-                setItemName('');
-                setSelectedCategory('');
-                setQuantity(1);
-                setExpiredDate(null);
+                Alert.alert('Berhasil! ✅', `${itemName} telah ditambahkan.`);
+                resetForm();
                 setIsLoading(false);
             }, 500);
             return;
@@ -128,44 +110,59 @@ export default function AddItemScreen() {
         try {
             const uid = user?.uid || (auth as any).currentUser?.uid;
             if (!uid) {
-                Alert.alert('Error', 'User not authenticated.');
+                Alert.alert('Error', 'User belum login.');
                 setIsLoading(false);
                 return;
             }
 
+            const categoryLabel = CATEGORIES[selectedCategory]?.label || selectedCategory;
+
             await addDoc(collection(db, 'inventory'), {
                 userId: uid,
                 itemName: itemName.trim(),
-                category: CATEGORIES[selectedCategory].label,
+                category: categoryLabel,
                 quantity: quantity.toString(),
                 addedDate: Timestamp.now(),
                 expiredDate: Timestamp.fromDate(expiredDate),
                 status: 'active',
             });
 
-            setItemName('');
-            setSelectedCategory('');
-            setQuantity(1);
-            setExpiredDate(null);
-            
-            if (!isLargeScreen) router.back();
-            else Alert.alert("Berhasil!", "Item ditambahkan.");
+            console.log("[AddItem] ✅ Item added successfully!");
+            Alert.alert("Berhasil! ✅", `${itemName} telah ditambahkan ke inventory.`);
+            resetForm();
 
-        } catch (error) {
-            console.error('Error adding item:', error);
-            Alert.alert('Failed', 'Could not add item.');
+            if (!isLargeScreen) {
+                setTimeout(() => router.back(), 500);
+            }
+        } catch (error: any) {
+            console.error('[AddItem] ❌ Error adding item:', error);
+            Alert.alert('Gagal', `Tidak bisa menambahkan item: ${error.message || 'Unknown error'}`);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const resetForm = () => {
+        setItemName('');
+        setSelectedCategory('');
+        setQuantity(1);
+        setExpiredDate(null);
+        setAiReason('');
+        setPredictedShelfLife(null);
+    };
+
+    // Safe category label getter
+    const getCategoryLabel = (key: string) => {
+        return CATEGORIES[key]?.label || key || '';
     };
 
     return (
         <View style={styles.container}>
             {/* Top Bar with Back Button */}
             <View style={styles.topBar}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                <Pressable style={styles.backBtn} onPress={() => router.back()}>
                     <IconSymbol name="arrow.left" size={24} color="#1e293b" />
-                </TouchableOpacity>
+                </Pressable>
             </View>
 
             <ScrollView 
@@ -188,7 +185,7 @@ export default function AddItemScreen() {
                                         <Text style={styles.label}>Item Name</Text>
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="Milk"
+                                            placeholder="Contoh: Susu, Telur, Ayam..."
                                             placeholderTextColor="#94a3b8"
                                             value={itemName}
                                             onChangeText={setItemName}
@@ -202,7 +199,7 @@ export default function AddItemScreen() {
                                                 const cat = CATEGORIES[key];
                                                 const isSelected = selectedCategory === key;
                                                 return (
-                                                    <TouchableOpacity
+                                                    <Pressable
                                                         key={key}
                                                         style={[styles.categoryBtn, isSelected && styles.categoryBtnSelected]}
                                                         onPress={() => handleCategorySelect(key)}
@@ -211,7 +208,7 @@ export default function AddItemScreen() {
                                                         <Text style={[styles.categoryBtnLabel, isSelected && styles.categoryBtnLabelSelected]} numberOfLines={1}>
                                                             {cat.label}
                                                         </Text>
-                                                    </TouchableOpacity>
+                                                    </Pressable>
                                                 );
                                             })}
                                         </View>
@@ -220,26 +217,52 @@ export default function AddItemScreen() {
                                     <View style={styles.rowLayout}>
                                         <View style={[styles.inputGroup, { flex: 1.5 }]}>
                                             <Text style={styles.label}>Expiry Date</Text>
-                                            <TouchableOpacity style={styles.inputControl} onPress={() => Alert.alert("Date Picker", "Pilih tanggal")}>
-                                                <Text style={styles.inputText}>{formatDate(expiredDate)}</Text>
-                                                <IconSymbol name="calendar" size={20} color="#94a3b8" />
-                                            </TouchableOpacity>
+                                            {Platform.OS === 'web' ? (
+                                                <input
+                                                    type="date"
+                                                    value={formatDateForInput(expiredDate)}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (val) {
+                                                            setExpiredDate(new Date(val + 'T00:00:00'));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        backgroundColor: '#fff',
+                                                        border: '1.5px solid #e2e8f0',
+                                                        borderRadius: 10,
+                                                        paddingLeft: 16,
+                                                        paddingRight: 16,
+                                                        height: 50,
+                                                        fontSize: 16,
+                                                        color: '#1e293b',
+                                                        fontFamily: 'inherit',
+                                                        width: '100%',
+                                                        boxSizing: 'border-box' as any,
+                                                    }}
+                                                />
+                                            ) : (
+                                                <View style={styles.inputControl}>
+                                                    <Text style={styles.inputText}>{formatDate(expiredDate)}</Text>
+                                                    <IconSymbol name="calendar" size={20} color="#94a3b8" />
+                                                </View>
+                                            )}
                                         </View>
                                         <View style={[styles.inputGroup, { flex: 1 }]}>
                                             <Text style={styles.label}>Quantity</Text>
                                             <View style={styles.stepperControl}>
-                                                <TouchableOpacity style={styles.stepBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
                                                     <Text style={styles.stepBtnText}>−</Text>
-                                                </TouchableOpacity>
+                                                </Pressable>
                                                 <TextInput
                                                     style={styles.stepperInput}
                                                     value={quantity.toString()}
-                                                    onChangeText={(v) => setQuantity(parseInt(v) || 0)}
+                                                    onChangeText={(v) => setQuantity(parseInt(v) || 1)}
                                                     keyboardType="numeric"
                                                 />
-                                                <TouchableOpacity style={styles.stepBtn} onPress={() => setQuantity(quantity + 1)}>
+                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(quantity + 1)}>
                                                     <Text style={styles.stepBtnText}>+</Text>
-                                                </TouchableOpacity>
+                                                </Pressable>
                                             </View>
                                         </View>
                                     </View>
@@ -254,12 +277,12 @@ export default function AddItemScreen() {
                                         {isAiPredicting ? (
                                             <View style={styles.guideLoading}>
                                                 <ActivityIndicator size="small" color="#2d9254" />
-                                                <Text style={styles.guideLoadingText}>Analyzing with Gemini AI...</Text>
+                                                <Text style={styles.guideLoadingText}>Analyzing with AI...</Text>
                                             </View>
                                         ) : itemName.length >= 2 ? (
                                             <View>
                                                 <Text style={styles.guideText}>
-                                                    For <Text style={{fontWeight: '700'}}>"{selectedCategory ? CATEGORIES[selectedCategory].label : itemName}"</Text>:
+                                                    For <Text style={{fontWeight: '700'}}>"{selectedCategory ? getCategoryLabel(selectedCategory) : itemName}"</Text>:
                                                 </Text>
                                                 <Text style={styles.guideText}>
                                                     {aiReason || `Store in the refrigerator to maintain freshness longer. Once opened, consume within a few days for best quality.`}
@@ -281,7 +304,7 @@ export default function AddItemScreen() {
                             </View>
 
                             {/* Footer Submit Button */}
-                            <TouchableOpacity 
+                            <Pressable 
                                 style={[styles.submitBtn, isLoading && { opacity: 0.8 }]} 
                                 onPress={handleSubmit}
                                 disabled={isLoading}
@@ -291,7 +314,7 @@ export default function AddItemScreen() {
                                 ) : (
                                     <Text style={styles.submitBtnText}>Add to Inventory</Text>
                                 )}
-                            </TouchableOpacity>
+                            </Pressable>
                         </View>
                     </View>
                 </View>
@@ -312,11 +335,11 @@ const styles = StyleSheet.create({
     cardHeader: { backgroundColor: '#2d9254', paddingVertical: 18, alignItems: 'center' },
     cardHeaderTitle: { color: '#fff', fontSize: 20, fontWeight: '700', letterSpacing: 0.5 },
     
-    mainCardBody: { padding: 16 },
-    mainCardFlex: { gap: 16 },
-    rowLayout: { flexDirection: 'row', gap: 24 },
+    mainCardBody: { padding: 20 },
+    mainCardFlex: { gap: 20 },
+    rowLayout: { flexDirection: 'row', gap: 16 },
     formSection: { gap: 16 },
-    guideSection: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 220 },
+    guideSection: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 180 },
     
     inputGroup: { gap: 8 },
     label: { fontSize: 13, fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -324,11 +347,11 @@ const styles = StyleSheet.create({
     inputControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 16, height: 50 },
     inputText: { flex: 1, fontSize: 16, color: '#1e293b' },
     
-    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    categoryBtn: { flexDirection: 'row', alignItems: 'center', width: '48%', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 8, gap: 6 },
+    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    categoryBtn: { flexDirection: 'row', alignItems: 'center', width: '48%', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, gap: 8 },
     categoryBtnSelected: { backgroundColor: '#f0fdf4', borderColor: '#22c55e', borderWidth: 2 },
-    categoryBtnIcon: { fontSize: 18 },
-    categoryBtnLabel: { fontSize: 11, fontWeight: '700', color: '#64748b' },
+    categoryBtnIcon: { fontSize: 20 },
+    categoryBtnLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', flexShrink: 1 },
     categoryBtnLabelSelected: { color: '#166534' },
     
     stepperControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, height: 50, overflow: 'hidden' },
@@ -338,15 +361,15 @@ const styles = StyleSheet.create({
     
     guideBanner: { backgroundColor: '#ecfdf5', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1.5, borderColor: '#d1fae5' },
     guideBannerText: { color: '#065f46', fontSize: 13, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
-    guideContent: { padding: 20, gap: 16 },
+    guideContent: { padding: 16, gap: 12 },
     guideText: { fontSize: 14, color: '#475569', lineHeight: 22 },
     guidePlaceholder: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', lineHeight: 20 },
-    guideLoading: { alignItems: 'center', paddingVertical: 30, gap: 12 },
+    guideLoading: { alignItems: 'center', paddingVertical: 24, gap: 10 },
     guideLoadingText: { fontSize: 13, color: '#64748b' },
     
     shelfLifeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#d1fae5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start', gap: 6, marginTop: 4 },
     shelfLifeText: { fontSize: 13, fontWeight: '800', color: '#065f46' },
     
-    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: '#2d9254', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 },
+    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: '#2d9254', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4, cursor: 'pointer' as any },
     submitBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 });
