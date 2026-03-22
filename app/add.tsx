@@ -168,7 +168,11 @@ export default function AddItemScreen() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.contentWrapper}>
                     {/* Main Elevated Card */}
                     <View style={styles.mainCard}>
