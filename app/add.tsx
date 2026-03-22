@@ -32,6 +32,16 @@ export default function AddItemScreen() {
     const [isAiPredicting, setIsAiPredicting] = useState(false);
     const [aiReason, setAiReason] = useState('');
     const [predictedShelfLife, setPredictedShelfLife] = useState<number | null>(null);
+    const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    // Cross-platform alert that works on mobile web
+    const showAlert = (title: string, message: string) => {
+        if (Platform.OS === 'web') {
+            window.alert(`${title}\n${message}`);
+        } else {
+            Alert.alert(title, message);
+        }
+    };
 
     const handleCategorySelect = (key: string) => {
         setSelectedCategory(key);
@@ -82,17 +92,21 @@ export default function AddItemScreen() {
 
     const handleSubmit = async () => {
         console.log("[AddItem] handleSubmit called", { itemName, selectedCategory, expiredDate, quantity });
+        setStatusMessage(null);
 
         if (!itemName.trim()) {
-            Alert.alert('Error', 'Masukkan nama barang.');
+            setStatusMessage({ type: 'error', text: '⚠️ Masukkan nama barang.' });
+            showAlert('Error', 'Masukkan nama barang.');
             return;
         }
         if (!selectedCategory) {
-            Alert.alert('Error', 'Pilih kategori barang.');
+            setStatusMessage({ type: 'error', text: '⚠️ Pilih kategori barang.' });
+            showAlert('Error', 'Pilih kategori barang.');
             return;
         }
         if (!expiredDate) {
-            Alert.alert('Error', 'Tanggal kedaluwarsa belum diatur.');
+            setStatusMessage({ type: 'error', text: '⚠️ Tanggal kedaluwarsa belum diatur.' });
+            showAlert('Error', 'Tanggal kedaluwarsa belum diatur.');
             return;
         }
 
@@ -100,7 +114,8 @@ export default function AddItemScreen() {
 
         if (IS_DEMO_MODE) {
             setTimeout(() => {
-                Alert.alert('Berhasil! ✅', `${itemName} telah ditambahkan.`);
+                setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' telah ditambahkan!' });
+                showAlert('Berhasil! ✅', `${itemName} telah ditambahkan.`);
                 resetForm();
                 setIsLoading(false);
             }, 500);
@@ -110,7 +125,8 @@ export default function AddItemScreen() {
         try {
             const uid = user?.uid || (auth as any).currentUser?.uid;
             if (!uid) {
-                Alert.alert('Error', 'User belum login.');
+                setStatusMessage({ type: 'error', text: '⚠️ Anda belum login. Silakan login terlebih dahulu.' });
+                showAlert('Error', 'Anda belum login. Silakan login dulu.');
                 setIsLoading(false);
                 return;
             }
@@ -128,16 +144,20 @@ export default function AddItemScreen() {
             });
 
             console.log("[AddItem] ✅ Item added successfully!");
-            Alert.alert("Berhasil! ✅", `${itemName} telah ditambahkan ke inventory.`);
+            setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' berhasil ditambahkan ke inventory!' });
+            showAlert('Berhasil! ✅', `${itemName} telah ditambahkan ke inventory.`);
             resetForm();
 
             if (!isLargeScreen) {
-                setTimeout(() => router.back(), 500);
+                setTimeout(() => router.back(), 1000);
             }
         } catch (error: any) {
             console.error('[AddItem] ❌ Error adding item:', error);
-            Alert.alert('Gagal', `Tidak bisa menambahkan item: ${error.message || 'Unknown error'}`);
-        } finally {
+            const msg = error.message?.includes('permission') 
+                ? 'Tidak bisa menyimpan: cek apakah Anda sudah login dan koneksi internet stabil.'
+                : `Tidak bisa menambahkan item: ${error.message || 'Unknown error'}`;
+            setStatusMessage({ type: 'error', text: '❌ ' + msg });
+            showAlert('Gagal', msg);        } finally {
             setIsLoading(false);
         }
     };
@@ -303,6 +323,21 @@ export default function AddItemScreen() {
                                 </View>
                             </View>
 
+                            {/* Status Message Banner */}
+                            {statusMessage && (
+                                <View style={[
+                                    styles.statusBanner, 
+                                    statusMessage.type === 'success' ? styles.statusSuccess : styles.statusError
+                                ]}>
+                                    <Text style={[
+                                        styles.statusText, 
+                                        statusMessage.type === 'success' ? styles.statusTextSuccess : styles.statusTextError
+                                    ]}>
+                                        {statusMessage.text}
+                                    </Text>
+                                </View>
+                            )}
+
                             {/* Footer Submit Button */}
                             <Pressable 
                                 style={[styles.submitBtn, isLoading && { opacity: 0.8 }]} 
@@ -370,6 +405,13 @@ const styles = StyleSheet.create({
     shelfLifeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#d1fae5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start', gap: 6, marginTop: 4 },
     shelfLifeText: { fontSize: 13, fontWeight: '800', color: '#065f46' },
     
-    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 24, shadowColor: '#2d9254', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4, cursor: 'pointer' as any },
+    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16, shadowColor: '#2d9254', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4, cursor: 'pointer' as any },
     submitBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+
+    statusBanner: { padding: 14, borderRadius: 10, marginTop: 16 },
+    statusSuccess: { backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
+    statusError: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' },
+    statusText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    statusTextSuccess: { color: '#166534' },
+    statusTextError: { color: '#991b1b' },
 });
