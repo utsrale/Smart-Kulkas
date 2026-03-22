@@ -177,9 +177,9 @@ export default function AddItemScreen() {
                         </View>
                         
                         <View style={styles.mainCardBody}>
-                            <View style={[styles.mainCardFlex, isLargeScreen && styles.rowLayout]}>
+                            <View style={[styles.mainCardFlex, styles.rowLayout, !isLargeScreen && { gap: 12 }]}>
                                 {/* Left Side: Form */}
-                                <View style={[styles.formSection, isLargeScreen && { flex: 1.1 }]}>
+                                <View style={[styles.formSection, { flex: 1.2 }]}>
                                     <View style={styles.inputGroup}>
                                         <Text style={styles.label}>Item Name</Text>
                                         <TextInput
@@ -242,7 +242,7 @@ export default function AddItemScreen() {
                                 </View>
 
                                 {/* Right Side: Storage Guide (AI Insight) */}
-                                <View style={[styles.guideSection, isLargeScreen && { flex: 0.9 }]}>
+                                <View style={[styles.guideSection, { flex: 0.8 }]}>
                                     <View style={styles.guideBanner}>
                                         <Text style={styles.guideBannerText}>Storage Guide</Text>
                                     </View>
@@ -308,10 +308,10 @@ const styles = StyleSheet.create({
     cardHeader: { backgroundColor: '#2d9254', paddingVertical: 18, alignItems: 'center' },
     cardHeaderTitle: { color: '#fff', fontSize: 20, fontWeight: '700', letterSpacing: 0.5 },
     
-    mainCardBody: { padding: 32 },
-    mainCardFlex: { gap: 32 },
+    mainCardBody: { padding: 16 },
+    mainCardFlex: { gap: 16 },
     rowLayout: { flexDirection: 'row', gap: 24 },
-    formSection: { gap: 20 },
+    formSection: { gap: 16 },
     guideSection: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 220 },
     
     inputGroup: { gap: 8 },
@@ -320,11 +320,11 @@ const styles = StyleSheet.create({
     inputControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 16, height: 50 },
     inputText: { flex: 1, fontSize: 16, color: '#1e293b' },
     
-    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    categoryBtn: { flexDirection: 'row', alignItems: 'center', width: '48.5%', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, gap: 10 },
+    categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    categoryBtn: { flexDirection: 'row', alignItems: 'center', width: '48%', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, padding: 8, gap: 6 },
     categoryBtnSelected: { backgroundColor: '#f0fdf4', borderColor: '#22c55e', borderWidth: 2 },
-    categoryBtnIcon: { fontSize: 22 },
-    categoryBtnLabel: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+    categoryBtnIcon: { fontSize: 18 },
+    categoryBtnLabel: { fontSize: 11, fontWeight: '700', color: '#64748b' },
     categoryBtnLabelSelected: { color: '#166534' },
     
     stepperControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, height: 50, overflow: 'hidden' },
