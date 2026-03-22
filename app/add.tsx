@@ -179,7 +179,7 @@ export default function AddItemScreen() {
                         <View style={styles.mainCardBody}>
                             <View style={[styles.mainCardFlex, isLargeScreen && styles.rowLayout]}>
                                 {/* Left Side: Form */}
-                                <View style={styles.formSection}>
+                                <View style={[styles.formSection, isLargeScreen && { flex: 1.1 }]}>
                                     <View style={styles.inputGroup}>
                                         <Text style={styles.label}>Item Name</Text>
                                         <TextInput
@@ -242,7 +242,7 @@ export default function AddItemScreen() {
                                 </View>
 
                                 {/* Right Side: Storage Guide (AI Insight) */}
-                                <View style={styles.guideSection}>
+                                <View style={[styles.guideSection, isLargeScreen && { flex: 0.9 }]}>
                                     <View style={styles.guideBanner}>
                                         <Text style={styles.guideBannerText}>Storage Guide</Text>
                                     </View>
@@ -311,8 +311,8 @@ const styles = StyleSheet.create({
     mainCardBody: { padding: 32 },
     mainCardFlex: { gap: 32 },
     rowLayout: { flexDirection: 'row', gap: 24 },
-    formSection: { flex: 1.1, gap: 20 },
-    guideSection: { flex: 0.9, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 220 },
+    formSection: { gap: 20 },
+    guideSection: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', minHeight: 220 },
     
     inputGroup: { gap: 8 },
     label: { fontSize: 13, fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 },
