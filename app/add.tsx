@@ -177,9 +177,9 @@ export default function AddItemScreen() {
                         </View>
                         
                         <View style={styles.mainCardBody}>
-                            <View style={[styles.mainCardFlex, styles.rowLayout, !isLargeScreen && { gap: 12 }]}>
+                            <View style={[styles.mainCardFlex, isLargeScreen && styles.rowLayout]}>
                                 {/* Left Side: Form */}
-                                <View style={[styles.formSection, { flex: 1.2 }]}>
+                                <View style={[styles.formSection, isLargeScreen && { flex: 1.1 }]}>
                                     <View style={styles.inputGroup}>
                                         <Text style={styles.label}>Item Name</Text>
                                         <TextInput
@@ -242,7 +242,7 @@ export default function AddItemScreen() {
                                 </View>
 
                                 {/* Right Side: Storage Guide (AI Insight) */}
-                                <View style={[styles.guideSection, { flex: 0.8 }]}>
+                                <View style={[styles.guideSection, isLargeScreen && { flex: 0.9 }]}>
                                     <View style={styles.guideBanner}>
                                         <Text style={styles.guideBannerText}>Storage Guide</Text>
                                     </View>
