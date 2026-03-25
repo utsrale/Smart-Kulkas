@@ -26,7 +26,7 @@ export default function AddItemScreen() {
 
     const [itemName, setItemName] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
-    const [quantity, setQuantity] = useState(1);
+    const [quantity, setQuantity] = useState<string>('1');
     const [expiredDate, setExpiredDate] = useState<Date | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isAiPredicting, setIsAiPredicting] = useState(false);
@@ -163,7 +163,7 @@ export default function AddItemScreen() {
     const resetForm = () => {
         setItemName('');
         setSelectedCategory('');
-        setQuantity(1);
+        setQuantity('1');
         setExpiredDate(null);
         setAiReason('');
         setPredictedShelfLife(null);
@@ -269,7 +269,7 @@ export default function AddItemScreen() {
                                         <View style={[styles.inputGroup, { flex: 1 }]}>
                                             <Text style={styles.label}>Quantity</Text>
                                             <View style={styles.stepperControl}>
-                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(String(Math.max(1, (parseInt(quantity) || 1) - 1)))}>
                                                     <Text style={styles.stepBtnText}>−</Text>
                                                 </Pressable>
                                                 {Platform.OS === 'web' ? (
@@ -277,7 +277,8 @@ export default function AddItemScreen() {
                                                         type="number"
                                                         min="1"
                                                         value={quantity}
-                                                        onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                                        onChange={(e) => setQuantity(e.target.value)}
+                                                        onBlur={() => { if (!quantity || parseInt(quantity) < 1) setQuantity('1'); }}
                                                         style={{
                                                             flex: 1,
                                                             textAlign: 'center',
@@ -296,12 +297,13 @@ export default function AddItemScreen() {
                                                 ) : (
                                                     <TextInput
                                                         style={styles.stepperInput}
-                                                        value={quantity.toString()}
-                                                        onChangeText={(v) => setQuantity(Math.max(1, parseInt(v) || 1))}
+                                                        value={quantity}
+                                                        onChangeText={setQuantity}
+                                                        onBlur={() => { if (!quantity || parseInt(quantity) < 1) setQuantity('1'); }}
                                                         keyboardType="numeric"
                                                     />
                                                 )}
-                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(quantity + 1)}>
+                                                <Pressable style={styles.stepBtn} onPress={() => setQuantity(String((parseInt(quantity) || 0) + 1))}>
                                                     <Text style={styles.stepBtnText}>+</Text>
                                                 </Pressable>
                                             </View>
