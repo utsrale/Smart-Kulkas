@@ -91,22 +91,21 @@ export default function AddItemScreen() {
     }, [itemName]);
 
     const handleSubmit = async () => {
-        console.log("[AddItem] handleSubmit called", { itemName, selectedCategory, expiredDate, quantity });
         setStatusMessage(null);
 
         if (!itemName.trim()) {
-            setStatusMessage({ type: 'error', text: '⚠️ Masukkan nama barang.' });
-            showAlert('Error', 'Masukkan nama barang.');
+            setStatusMessage({ type: 'error', text: '⚠️ Please enter an item name.' });
+            showAlert('Error', 'Please enter an item name.');
             return;
         }
         if (!selectedCategory) {
-            setStatusMessage({ type: 'error', text: '⚠️ Pilih kategori barang.' });
-            showAlert('Error', 'Pilih kategori barang.');
+            setStatusMessage({ type: 'error', text: '⚠️ Please select an item category.' });
+            showAlert('Error', 'Please select an item category.');
             return;
         }
         if (!expiredDate) {
-            setStatusMessage({ type: 'error', text: '⚠️ Tanggal kedaluwarsa belum diatur.' });
-            showAlert('Error', 'Tanggal kedaluwarsa belum diatur.');
+            setStatusMessage({ type: 'error', text: '⚠️ Expiry date is not set.' });
+            showAlert('Error', 'Expiry date is not set.');
             return;
         }
 
@@ -114,8 +113,8 @@ export default function AddItemScreen() {
 
         if (IS_DEMO_MODE) {
             setTimeout(() => {
-                setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' telah ditambahkan!' });
-                showAlert('Berhasil! ✅', `${itemName} telah ditambahkan.`);
+                setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' has been added!' });
+                showAlert('Success! ✅', `${itemName} has been added.`);
                 resetForm();
                 setIsLoading(false);
             }, 500);
@@ -125,8 +124,8 @@ export default function AddItemScreen() {
         try {
             const uid = user?.uid || (auth as any).currentUser?.uid;
             if (!uid) {
-                setStatusMessage({ type: 'error', text: '⚠️ Anda belum login. Silakan login terlebih dahulu.' });
-                showAlert('Error', 'Anda belum login. Silakan login dulu.');
+                setStatusMessage({ type: 'error', text: '⚠️ You are not logged in. Please log in first.' });
+                showAlert('Error', 'You are not logged in. Please log in first.');
                 setIsLoading(false);
                 return;
             }
@@ -143,9 +142,8 @@ export default function AddItemScreen() {
                 status: 'active',
             });
 
-            console.log("[AddItem] ✅ Item added successfully!");
-            setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' berhasil ditambahkan ke inventory!' });
-            showAlert('Berhasil! ✅', `${itemName} telah ditambahkan ke inventory.`);
+            setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' successfully added to the inventory!' });
+            showAlert('Success! ✅', `${itemName} has been added to the inventory.`);
             resetForm();
 
             if (!isLargeScreen) {
@@ -154,10 +152,10 @@ export default function AddItemScreen() {
         } catch (error: any) {
             console.error('[AddItem] ❌ Error adding item:', error);
             const msg = error.message?.includes('permission') 
-                ? 'Tidak bisa menyimpan: cek apakah Anda sudah login dan koneksi internet stabil.'
-                : `Tidak bisa menambahkan item: ${error.message || 'Unknown error'}`;
+                ? 'Cannot save: check if you are logged in and your internet connection is stable.'
+                : `Cannot add item: ${error.message || 'Unknown error'}`;
             setStatusMessage({ type: 'error', text: '❌ ' + msg });
-            showAlert('Gagal', msg);        } finally {
+            showAlert('Failed', msg);        } finally {
             setIsLoading(false);
         }
     };
@@ -205,7 +203,7 @@ export default function AddItemScreen() {
                                         <Text style={styles.label}>Item Name</Text>
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="Contoh: Susu, Telur, Ayam..."
+                                            placeholder="Example: Milk, Eggs, Chicken..."
                                             placeholderTextColor="#94a3b8"
                                             value={itemName}
                                             onChangeText={setItemName}
@@ -274,12 +272,35 @@ export default function AddItemScreen() {
                                                 <Pressable style={styles.stepBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
                                                     <Text style={styles.stepBtnText}>−</Text>
                                                 </Pressable>
-                                                <TextInput
-                                                    style={styles.stepperInput}
-                                                    value={quantity.toString()}
-                                                    onChangeText={(v) => setQuantity(parseInt(v) || 1)}
-                                                    keyboardType="numeric"
-                                                />
+                                                {Platform.OS === 'web' ? (
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={quantity}
+                                                        onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                                        style={{
+                                                            flex: 1,
+                                                            textAlign: 'center',
+                                                            fontSize: 16,
+                                                            fontWeight: 800,
+                                                            color: '#1e293b',
+                                                            border: 'none',
+                                                            outline: 'none',
+                                                            background: 'transparent',
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            fontFamily: 'inherit',
+                                                            MozAppearance: 'textfield' as any,
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <TextInput
+                                                        style={styles.stepperInput}
+                                                        value={quantity.toString()}
+                                                        onChangeText={(v) => setQuantity(Math.max(1, parseInt(v) || 1))}
+                                                        keyboardType="numeric"
+                                                    />
+                                                )}
                                                 <Pressable style={styles.stepBtn} onPress={() => setQuantity(quantity + 1)}>
                                                     <Text style={styles.stepBtnText}>+</Text>
                                                 </Pressable>
