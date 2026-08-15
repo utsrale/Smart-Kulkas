@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Platform } from "react-native";
 
 /**
  * AI Service for Smart Inventory Kulkas
@@ -30,7 +29,7 @@ export interface RecipeSuggestion {
 
 // ─── API Keys ───────────────────────────────────────────────
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 // ─── OpenRouter Fallback Helper ─────────────────────────────
@@ -45,7 +44,6 @@ const callOpenRouter = async (prompt: string, systemPrompt?: string): Promise<st
     }
     messages.push({ role: "user", content: prompt });
 
-    console.log("[OpenRouter] 🔄 Sending request to nvidia/nemotron-nano-9b-v2:free...");
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -68,7 +66,6 @@ const callOpenRouter = async (prompt: string, systemPrompt?: string): Promise<st
     let text = data.choices?.[0]?.message?.content || "";
     // Clean potential markdown code blocks
     text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    console.log("[OpenRouter] ✅ Success! Response length:", text.length);
     return text;
 };
 
@@ -154,7 +151,7 @@ Output MUST be a valid JSON object with the following fields:
 - categoryKey: One of [sayur, buah, daging, ikan, susu, telur, bumbu, minuman, lainnya]
 - shelfLifeDays: Integer (number of days it lasts)
 - confidence: Float (e.g. 0.9)
-- reason: A short explanation in Indonesian (e.g., "Susu UHT tahan lama karena proses sterilisasi.").
+- reason: A short explanation in English (e.g., "UHT milk lasts longer due to the sterilization process.").
 
 Respond only with JSON. Do NOT wrap with markdown blocks.
 `;
@@ -162,7 +159,6 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            console.log("[Gemini] Predicting item details for:", itemName);
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
@@ -173,7 +169,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
                 categoryKey: parsed.categoryKey || 'lainnya',
                 shelfLifeDays: parsed.shelfLifeDays || 7,
                 confidence: parsed.confidence || 0.8,
-                reason: parsed.reason || "Berdasarkan analisis AI Gemini."
+                reason: parsed.reason || "Based on Gemini AI analysis."
             };
         } catch (geminiError: any) {
             console.warn("[Gemini] ⚠️ Failed:", geminiError.message?.substring(0, 100));
@@ -183,7 +179,6 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
 
     // --- Fallback: OpenRouter ---
     try {
-        console.log("[OpenRouter] 🔄 Fallback for prediction:", itemName);
         const text = await callOpenRouter(prompt, systemPrompt);
         const cleanedText = extractJSON(text);
         const parsed = JSON.parse(cleanedText) as PredictionResult;
@@ -191,7 +186,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
             categoryKey: parsed.categoryKey || 'lainnya',
             shelfLifeDays: parsed.shelfLifeDays || 7,
             confidence: parsed.confidence || 0.8,
-            reason: parsed.reason || "Berdasarkan analisis AI (Backup)."
+            reason: parsed.reason || "Based on AI analysis (Backup)."
         };
     } catch (fallbackError: any) {
         console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
@@ -199,7 +194,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
             categoryKey: 'lainnya',
             shelfLifeDays: 7,
             confidence: 0.1,
-            reason: "AI sedang tidak tersedia. Silakan coba lagi nanti."
+            reason: "AI is currently unavailable. Please try again later."
         };
     }
 };
@@ -211,25 +206,25 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
 export const generateRecipes = async (ingredients: string[]): Promise<RecipeSuggestion[]> => {
     if (!ingredients || ingredients.length === 0) return [];
 
-    const systemPrompt = "Anda adalah koki profesional bintang lima. Anda hanya merespons menggunakan JSON array valid tanpa markdown block.";
+    const systemPrompt = "You are a five-star professional chef. You only respond using a valid JSON array without markdown blocks.";
     const prompt = `
-Anda adalah koki profesional bintang lima. Saya memiliki bahan-bahan masakan berikut di kulkas saya:
+You are a five-star professional chef. I have the following cooking ingredients in my fridge:
 ${ingredients.join(", ")}
 
-Berikan saya tepat 3 ide resep masakan enak berbahasa Indonesia yang utama menggunakan bahan-bahan tersebut. 
-Anda diizinkan untuk menambahkan bumbu/bahan pelengkap umum lainnya (seperti garam, gula, bawang, minyak, saus, dll) yang mungkin tidak saya sebutkan, agar masakan menjadi sempurna.
+Give me exactly 3 delicious recipe ideas in English that primarily use these ingredients. 
+You are allowed to add other common spices/complementary ingredients (like salt, sugar, onion, oil, sauce, etc.) that I might not have mentioned, to make the dish perfect.
 
 Output MUST be a strictly valid JSON ARRAY of objects. Each object MUST have these properties:
-- title: String (Nama masakan dalam Bahasa Indonesia)
-- description: String (1 kalimat deskripsi menarik)
-- prepTime: String (Estimasi waktu, contoh: "30 Menit")
+- title: String (Name of the dish in English)
+- description: String (1 engaging descriptive sentence in English)
+- prepTime: String (Estimated time, e.g. "30 Minutes")
 - difficulty: String (Easy / Medium / Hard)
-- calories: String (Estimasi kalori per porsi, contoh: "450 kcal")
-- imageKeyword: String (2-3 kata kunci dalam Bahasa Inggris untuk menggambarkan hidangan ini, contoh: "fried rice plate")
-- fridgeIngredients: Array of objects {name: String, amount: String} (bahan yang diambil dari daftar kulkas saya)
-- pantryStaples: Array of Strings (bumbu/bahan umum tambahan yang Anda sarankan, contoh: "Garam secukupnya")
-- ingredients: Array of Strings (SEMUA bahan lengkap)
-- instructions: Array of Strings (Langkah-langkah memasak yang ringkas namun jelas)
+- calories: String (Estimated calories per serving, e.g. "450 kcal")
+- imageKeyword: String (2-3 keywords in English to describe this dish, e.g. "fried rice plate")
+- fridgeIngredients: Array of objects {name: String, amount: String} (ingredients taken from my fridge list in English)
+- pantryStaples: Array of Strings (additional common spices/ingredients you suggest in English, e.g. "Salt to taste")
+- ingredients: Array of Strings (ALL complete ingredients in English)
+- instructions: Array of Strings (Concise but clear cooking steps in English)
 
 Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
 `;
@@ -239,7 +234,7 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
         const parsed = JSON.parse(cleaned) as any[];
         return parsed.map((item, index) => ({
             id: `${prefix}-${Date.now()}-${index}`,
-            title: item.title || "Resep Tanpa Nama",
+            title: item.title || "Untitled Recipe",
             description: item.description || "",
             prepTime: item.prepTime || "-",
             difficulty: item.difficulty || "Easy",
@@ -255,7 +250,6 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            console.log("[Gemini] Generating recipes...");
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
@@ -270,12 +264,11 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
 
     // --- Fallback: OpenRouter ---
     try {
-        console.log("[OpenRouter] 🔄 Fallback for recipes...");
         const text = await callOpenRouter(prompt, systemPrompt);
         return parseRecipes(text, "recipe-backup");
     } catch (fallbackError: any) {
         console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
-        throw new Error("Gagal mendapatkan resep dari kedua server AI. Silakan coba lagi nanti. 👨‍🍳");
+        throw new Error("Failed to get recipes from both AI servers. Please try again later. 👨‍🍳");
     }
 };
 
@@ -284,25 +277,24 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
  * Generates a smart sustainability tip. Tries Gemini first, then OpenRouter.
  */
 export const generateSustainabilityTips = async (wastedItems: string[], consumedItems: string[]): Promise<string> => {
-    const systemPrompt = "Anda adalah pakar lingkungan dan food waste reduction yang handal. Berikan tips singkat dan praktis dalam Bahasa Indonesia.";
+    const systemPrompt = "You are a reliable environment and food waste reduction expert. Give a short and practical tip in English.";
     const prompt = `
-Pengguna aplikasi Smart Fridge ini baru saja membuang bahan-bahan berikut (karena kedaluwarsa): ${wastedItems.length > 0 ? wastedItems.join(", ") : "Tidak ada!"}
-Dan mereka berhasil menghabiskan bahan-bahan berikut sebelum kedaluwarsa: ${consumedItems.length > 0 ? consumedItems.join(", ") : "Belum ada data."}
+This Smart Fridge app user just wasted the following ingredients (due to expiration): ${wastedItems.length > 0 ? wastedItems.join(", ") : "None!"}
+And they managed to consume the following ingredients before expiring: ${consumedItems.length > 0 ? consumedItems.join(", ") : "No data yet."}
 
-Berikan TEPAT SATU kalimat tips atau motivasi (maksimal 2 kalimat singkat) dalam Bahasa Indonesia yang:
-- Sangat spesifik dan relevan dengan bahan yang mereka buang (jika ada).
-- Memberikan pujian jika mereka tidak membuang banyak barang.
-- Praktis dan bisa langsung diterapkan di dapur (misalnya cara menyimpan bahan tertentu agar lebih awet).
+Give EXACTLY ONE sentence of tip or motivation (maximum 2 short sentences) in English that:
+- Is very specific and relevant to the ingredients they wasted (if any).
+- Gives praise if they didn't waste many items.
+- Is practical and can be directly applied in the kitchen (e.g. how to store certain ingredients to last longer).
 
-Jangan gunakan format list, markdown, atau pembukaan/penutup doa/salam. Cukup langsung berikan tipsnya.
+Do not use list formatting, markdown, or opening/closing greetings. Just directly give the tip.
 `;
 
-    const defaultTip = "Letakkan bahan baru di bagian belakang kulkas (Metode First In, First Out) agar bahan lama terpakai lebih dulu!";
+    const defaultTip = "Place new ingredients at the back of the fridge (First In, First Out method) so older ingredients are used first!";
 
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            console.log("[Gemini] Generating sustainability tips...");
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
@@ -315,7 +307,6 @@ Jangan gunakan format list, markdown, atau pembukaan/penutup doa/salam. Cukup la
 
     // --- Fallback: OpenRouter ---
     try {
-        console.log("[OpenRouter] 🔄 Fallback for sustainability tips...");
         const text = await callOpenRouter(prompt, systemPrompt);
         return text.replace(/['"]/g, '');
     } catch (fallbackError: any) {

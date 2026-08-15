@@ -1,6 +1,5 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRouter } from 'expo-router';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -13,13 +12,11 @@ import {
     useWindowDimensions,
     View
 } from 'react-native';
-import { auth, db } from '../src/config/firebase';
-import { IS_DEMO_MODE, useAuth } from '../src/contexts/AuthContext';
+import { addInventoryItem } from '../src/services/localStore';
 import { predictItemDetails } from '../src/services/aiService';
 import { CATEGORIES, CATEGORY_KEYS, getDefaultExpDate } from '../src/utils/categoryDefaults';
 
 export default function AddItemScreen() {
-    const { user } = useAuth();
     const router = useRouter();
     const { width } = useWindowDimensions();
     const isLargeScreen = width > 768;
@@ -111,35 +108,14 @@ export default function AddItemScreen() {
 
         setIsLoading(true);
 
-        if (IS_DEMO_MODE) {
-            setTimeout(() => {
-                setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' has been added!' });
-                showAlert('Success! ✅', `${itemName} has been added.`);
-                resetForm();
-                setIsLoading(false);
-            }, 500);
-            return;
-        }
-
         try {
-            const uid = user?.uid || (auth as any).currentUser?.uid;
-            if (!uid) {
-                setStatusMessage({ type: 'error', text: '⚠️ You are not logged in. Please log in first.' });
-                showAlert('Error', 'You are not logged in. Please log in first.');
-                setIsLoading(false);
-                return;
-            }
-
             const categoryLabel = CATEGORIES[selectedCategory]?.label || selectedCategory;
 
-            await addDoc(collection(db, 'inventory'), {
-                userId: uid,
+            await addInventoryItem({
                 itemName: itemName.trim(),
                 category: categoryLabel,
                 quantity: quantity.toString(),
-                addedDate: Timestamp.now(),
-                expiredDate: Timestamp.fromDate(expiredDate),
-                status: 'active',
+                expiredDate,
             });
 
             setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' successfully added to the inventory!' });
@@ -151,11 +127,9 @@ export default function AddItemScreen() {
             }
         } catch (error: any) {
             console.error('[AddItem] ❌ Error adding item:', error);
-            const msg = error.message?.includes('permission') 
-                ? 'Cannot save: check if you are logged in and your internet connection is stable.'
-                : `Cannot add item: ${error.message || 'Unknown error'}`;
-            setStatusMessage({ type: 'error', text: '❌ ' + msg });
-            showAlert('Failed', msg);        } finally {
+            setStatusMessage({ type: 'error', text: '❌ Gagal menyimpan item. Coba lagi.' });
+            showAlert('Failed', 'Gagal menyimpan item. Coba lagi.');
+        } finally {
             setIsLoading(false);
         }
     };
@@ -325,7 +299,7 @@ export default function AddItemScreen() {
                                         ) : itemName.length >= 2 ? (
                                             <View>
                                                 <Text style={styles.guideText}>
-                                                    For <Text style={{fontWeight: '700'}}>"{selectedCategory ? getCategoryLabel(selectedCategory) : itemName}"</Text>:
+                                                    For <Text style={{fontWeight: '700'}}>&quot;{selectedCategory ? getCategoryLabel(selectedCategory) : itemName}&quot;</Text>:
                                                 </Text>
                                                 <Text style={styles.guideText}>
                                                     {aiReason || `Store in the refrigerator to maintain freshness longer. Once opened, consume within a few days for best quality.`}
@@ -384,12 +358,12 @@ export default function AddItemScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f1f5f9' },
     topBar: { paddingHorizontal: 24, paddingTop: Platform.OS === 'ios' ? 64 : 24, paddingBottom: 16 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+    backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)', elevation: 4 },
     
     scrollContent: { paddingBottom: 60 },
     contentWrapper: { alignItems: 'center', paddingHorizontal: 24 },
     
-    mainCard: { width: '100%', maxWidth: 1040, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 30, elevation: 10, marginTop: 10 },
+    mainCard: { width: '100%', maxWidth: 1040, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.12)', elevation: 10, marginTop: 10 },
     cardHeader: { backgroundColor: '#2d9254', paddingVertical: 18, alignItems: 'center' },
     cardHeaderTitle: { color: '#fff', fontSize: 20, fontWeight: '700', letterSpacing: 0.5 },
     
@@ -428,7 +402,7 @@ const styles = StyleSheet.create({
     shelfLifeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#d1fae5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start', gap: 6, marginTop: 4 },
     shelfLifeText: { fontSize: 13, fontWeight: '800', color: '#065f46' },
     
-    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16, shadowColor: '#2d9254', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4, cursor: 'pointer' as any },
+    submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16, boxShadow: '0 4px 10px rgba(45, 146, 84, 0.3)', elevation: 4, cursor: 'pointer' as any },
     submitBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
     statusBanner: { padding: 14, borderRadius: 10, marginTop: 16 },

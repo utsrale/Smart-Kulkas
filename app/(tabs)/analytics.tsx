@@ -1,10 +1,9 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { auth, db } from '../../src/config/firebase';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { getInventoryItems } from '../../src/services/localStore';
 import { generateSustainabilityTips } from '../../src/services/aiService';
 
 interface CategoryStat {
@@ -17,55 +16,45 @@ interface CategoryStat {
 }
 
 export default function AnalyticsScreen() {
-    const { user } = useAuth();
     const [totalItems, setTotalItems] = useState(0);
     const [activeItems, setActiveItems] = useState(0);
     const [expiredItems, setExpiredItems] = useState(0);
     const [nearExpiryItems, setNearExpiryItems] = useState(0);
     const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
     const [aiTip, setAiTip] = useState<string>('');
+    // Menandai bahwa AI tip sudah pernah difetch agar tidak berulang saat snapshot berubah
+    const tipFetchedRef = useRef(false);
     const [isLoadingTip, setIsLoadingTip] = useState(false);
 
-    useEffect(() => {
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) return;
+    const loadStats = useCallback(async () => {
+        try {
+            const inventory = await getInventoryItems();
 
-        const q = query(
-            collection(db, 'inventory'),
-            where('userId', '==', uid)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             let total = 0, active = 0, expired = 0, nearExpiry = 0;
             const catMap: Record<string, { total: number; expired: number; items: string[] }> = {};
 
-            snapshot.docs.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.status !== 'active') return;
+            inventory.forEach(item => {
+                if (item.status !== 'active') return;
 
                 total++;
-                const category = data.category || 'Lainnya';
+                const category = item.category || 'Lainnya';
 
                 if (!catMap[category]) catMap[category] = { total: 0, expired: 0, items: [] };
                 catMap[category].total++;
 
-                if (data.expiredDate) {
-                    const expDate = data.expiredDate.toDate();
-                    expDate.setHours(0, 0, 0, 0);
-                    const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                const expDate = new Date(item.expiredDate);
+                expDate.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-                    if (diffDays <= 0) {
-                        expired++;
-                        catMap[category].expired++;
-                        catMap[category].items.push(data.itemName);
-                    } else if (diffDays <= 3) {
-                        nearExpiry++;
-                    } else {
-                        active++;
-                    }
+                if (diffDays <= 0) {
+                    expired++;
+                    catMap[category].expired++;
+                    catMap[category].items.push(item.itemName);
+                } else if (diffDays <= 3) {
+                    nearExpiry++;
                 } else {
                     active++;
                 }
@@ -99,27 +88,34 @@ export default function AnalyticsScreen() {
                         color: c.color,
                         bgColor: c.bg,
                         wastedKg: Number((val.expired * 0.35).toFixed(1)),
-                        detail: val.items.slice(0, 2).join(' & ') || 'Item kedaluwarsa',
+                        detail: val.items.slice(0, 2).join(' & ') || 'Expired items',
                     };
                 });
             setCategoryStats(stats);
 
             // Fetch AI Tip if we have data and haven't fetched yet
-            if (aiTip === '') {
+            if (!tipFetchedRef.current) {
+                tipFetchedRef.current = true;
                 setIsLoadingTip(true);
                 const wastedList = Object.entries(catMap).filter(([_, v]) => v.expired > 0).flatMap(([_, v]) => v.items);
                 const consumedList = Object.entries(catMap).filter(([_, v]) => v.total > v.expired).map(([k, _]) => k); // Just categories to save prompt tokens
 
                 generateSustainabilityTips(wastedList.slice(0, 5), consumedList.slice(0, 5))
                     .then(tip => setAiTip(tip))
-                    .catch(() => setAiTip("Gunakan metode First In, First Out untuk bahan makanan Anda!"))
+                    .catch(() => setAiTip("Use the First In, First Out method for your food!"))
                     .finally(() => setIsLoadingTip(false));
             }
 
-        });
+        } catch (error) {
+            console.error('Gagal memuat statistik:', error);
+        }
+    }, []);
 
-        return () => unsubscribe();
-    }, [user]);
+    useFocusEffect(
+        useCallback(() => {
+            loadStats();
+        }, [loadStats])
+    );
 
     // Calculations
     const consumed = activeItems + nearExpiryItems;
@@ -140,15 +136,15 @@ export default function AnalyticsScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Laporan Keberlanjutan 🌿</Text>
-                <Text style={styles.headerSubtitle}>Pantau dampak positif Anda terhadap lingkungan</Text>
+                <Text style={styles.headerTitle}>Sustainability Report 🌿</Text>
+                <Text style={styles.headerSubtitle}>Monitor your positive impact on the environment</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
                 {/* Donut Chart Card */}
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Konsumsi vs Limbah</Text>
+                    <Text style={styles.cardTitle}>Consumed vs Wasted</Text>
                     <View style={styles.chartRow}>
                         <View style={styles.chartContainer}>
                             <Svg width={130} height={130} viewBox="0 0 120 120">
@@ -173,7 +169,7 @@ export default function AnalyticsScreen() {
                             </Svg>
                             <View style={styles.chartCenter}>
                                 <Text style={styles.chartBig}>{totalKg}</Text>
-                                <Text style={styles.chartLabel}>KG TOTAL</Text>
+                                <Text style={styles.chartLabel}>TOTAL KG</Text>
                             </View>
                         </View>
 
@@ -181,14 +177,14 @@ export default function AnalyticsScreen() {
                             <View style={styles.legendItem}>
                                 <View style={[styles.legendDot, { backgroundColor: '#13ec6d' }]} />
                                 <View>
-                                    <Text style={styles.legendLabel}>Terpakai</Text>
+                                    <Text style={styles.legendLabel}>Consumed</Text>
                                     <Text style={styles.legendValue}>{consumedKg} kg ({consumedPct}%)</Text>
                                 </View>
                             </View>
                             <View style={styles.legendItem}>
                                 <View style={[styles.legendDot, { backgroundColor: '#f87171' }]} />
                                 <View>
-                                    <Text style={styles.legendLabel}>Terbuang</Text>
+                                    <Text style={styles.legendLabel}>Wasted</Text>
                                     <Text style={styles.legendValue}>{wastedKg} kg ({wastedPct}%)</Text>
                                 </View>
                             </View>
@@ -201,25 +197,25 @@ export default function AnalyticsScreen() {
                     <View style={styles.statCard}>
                         <View style={styles.statIconRow}>
                             <Text style={{ fontSize: 18 }}>💰</Text>
-                            <Text style={styles.statLabel}>PENGHEMATAN</Text>
+                            <Text style={styles.statLabel}>SAVINGS</Text>
                         </View>
                         <Text style={styles.statValue}>Rp {savingsRp.toLocaleString('id-ID')}</Text>
-                        <Text style={styles.statHint}>Estimasi bulan ini</Text>
+                        <Text style={styles.statHint}>Estimated this month</Text>
                     </View>
                     <View style={[styles.statCard, styles.statCardGreen]}>
                         <View style={styles.statIconRow}>
                             <Text style={{ fontSize: 18 }}>🌍</Text>
-                            <Text style={[styles.statLabel, { color: '#0f172a' }]}>DAMPAK ECO</Text>
+                            <Text style={[styles.statLabel, { color: '#0f172a' }]}>ECO IMPACT</Text>
                         </View>
                         <Text style={[styles.statValue, { color: '#0f172a' }]}>-{co2Reduced} kg</Text>
-                        <Text style={[styles.statHint, { color: '#0f172a', opacity: 0.7 }]}>Emisi CO₂ Berkurang</Text>
+                        <Text style={[styles.statHint, { color: '#0f172a', opacity: 0.7 }]}>CO₂ Emissions Reduced</Text>
                     </View>
                 </View>
 
                 {/* Top Wasted Categories */}
                 {categoryStats.length > 0 && (
                     <View style={styles.sectionBlock}>
-                        <Text style={styles.sectionTitle}>Kategori Paling Banyak Terbuang</Text>
+                        <Text style={styles.sectionTitle}>Top Wasted Categories</Text>
                         {categoryStats.map((cat, idx) => {
                             const maxWaste = categoryStats[0]?.wastedKg || 1;
                             const barWidth = Math.max((cat.wastedKg / maxWaste) * 100, 10);
@@ -246,10 +242,12 @@ export default function AnalyticsScreen() {
 
                 {categoryStats.length === 0 && (
                     <View style={styles.sectionBlock}>
-                        <Text style={styles.sectionTitle}>Kategori Paling Banyak Terbuang</Text>
+                        <Text style={styles.sectionTitle}>Top Wasted Categories</Text>
                         <View style={styles.emptyCard}>
-                            <Text style={{ fontSize: 32 }}>🎉</Text>
-                            <Text style={styles.emptyText}>Luar biasa! Tidak ada bahan yang terbuang saat ini.</Text>
+                            <View style={styles.emptyIconCircle}>
+                                <IconSymbol name="checkmark.seal.fill" size={28} color="#15803d" />
+                            </View>
+                            <Text style={styles.emptyText}>Awesome! No items wasted at the moment.</Text>
                         </View>
                     </View>
                 )}
@@ -260,11 +258,11 @@ export default function AnalyticsScreen() {
                         <IconSymbol name="sparkles" size={24} color="#13ec6d" />
                     </View>
                     <View style={styles.tipContent}>
-                        <Text style={styles.tipTitle}>Wawasan Cerdas AI</Text>
+                        <Text style={styles.tipTitle}>AI Smart Insights</Text>
                         {isLoadingTip ? (
                             <ActivityIndicator size="small" color="#13ec6d" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
                         ) : (
-                            <Text style={styles.tipText}>{aiTip || "Mari kurangi food waste bersama!"}</Text>
+                            <Text style={styles.tipText}>{aiTip || "Let's reduce food waste together!"}</Text>
                         )}
                     </View>
                 </View>
@@ -283,7 +281,7 @@ const styles = StyleSheet.create({
     scrollContent: { padding: 16, paddingBottom: 100 },
 
     // Donut Card
-    card: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
+    card: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)', elevation: 2 },
     cardTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 16 },
     chartRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     chartContainer: { position: 'relative', width: 130, height: 130, justifyContent: 'center', alignItems: 'center' },
@@ -298,7 +296,7 @@ const styles = StyleSheet.create({
 
     // Stats Grid
     statsGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-    statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
+    statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)', elevation: 2 },
     statCardGreen: { backgroundColor: '#13ec6d', borderColor: 'transparent' },
     statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
     statLabel: { fontSize: 10, fontWeight: '800', color: '#13ec6d', letterSpacing: 1 },
@@ -310,7 +308,7 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
 
     // Category Cards
-    catCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
+    catCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)', elevation: 1 },
     catIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     catContent: { flex: 1 },
     catName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
@@ -322,7 +320,8 @@ const styles = StyleSheet.create({
 
     // Empty
     emptyCard: { backgroundColor: '#fff', borderRadius: 14, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(19,236,109,0.06)' },
-    emptyText: { fontSize: 14, color: '#64748b', textAlign: 'center', marginTop: 8 },
+    emptyIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+    emptyText: { fontSize: 14, color: '#64748b', textAlign: 'center' },
 
     // Tip
     tipCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(19,236,109,0.08)', borderWidth: 1, borderColor: 'rgba(19,236,109,0.2)', borderRadius: 14, padding: 16, gap: 14 },

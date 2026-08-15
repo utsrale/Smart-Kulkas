@@ -1,21 +1,11 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../src/config/firebase';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ShopItem, deleteInventoryItem, getInventoryItems, getShoppingList, saveShoppingList } from '../../src/services/localStore';
 
-interface ShopItem {
-    id: string;
-    text: string;
-    subtitle?: string;
-    amount?: string;
-    checked: boolean;
-    section: 'suggestion' | 'recipe' | 'fridge' | 'personal';
-}
 
 export default function ShopScreen() {
-    const { user } = useAuth();
     const [newItemText, setNewItemText] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -28,65 +18,68 @@ export default function ShopScreen() {
     // Personal list
     const [personalItems, setPersonalItems] = useState<ShopItem[]>([]);
 
-    // Load fridge items that are expiring soon (≤2 days)
-    useEffect(() => {
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) return;
+    // Muat ulang setiap kali tab mendapat fokus: bahan hampir kedaluwarsa (≤2 hari) + list pribadi
+    const loadData = useCallback(async () => {
+        try {
+            const [inventory, savedList] = await Promise.all([getInventoryItems(), getShoppingList()]);
 
-        const q = query(
-            collection(db, 'inventory'),
-            where('userId', '==', uid)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             const expiring: ShopItem[] = [];
-            snapshot.docs.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.status !== 'active') return;
-                if (data.expiredDate) {
-                    const expDate = data.expiredDate.toDate();
-                    expDate.setHours(0, 0, 0, 0);
-                    const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            inventory.forEach(item => {
+                if (item.status !== 'active') return;
+                const expDate = new Date(item.expiredDate);
+                expDate.setHours(0, 0, 0, 0);
+                const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-                    if (diffDays <= 2) {
-                        expiring.push({
-                            id: `fridge-${docSnap.id}`,
-                            text: data.itemName,
-                            subtitle: diffDays <= 0 ? 'Sudah kedaluwarsa' : `Sisa ${diffDays} hari lagi`,
-                            amount: data.quantity || '1',
-                            checked: false,
-                            section: 'fridge'
-                        });
-                    }
+                if (diffDays <= 2) {
+                    expiring.push({
+                        id: `fridge-${item.id}`,
+                        text: item.itemName,
+                        subtitle: diffDays <= 0 ? 'Already expired' : `${diffDays} days left`,
+                        amount: item.quantity || '1',
+                        checked: false,
+                        section: 'fridge'
+                    });
                 }
             });
             setFridgeItems(expiring);
-        });
+            setPersonalItems(savedList);
+        } catch (error) {
+            console.error('Gagal memuat shopping list:', error);
+        }
+    }, []);
 
-        return () => unsubscribe();
-    }, [user]);
+    useFocusEffect(
+        useCallback(() => {
+            loadData();
+        }, [loadData])
+    );
+
+    const persistPersonal = (next: ShopItem[]) => {
+        setPersonalItems(next);
+        saveShoppingList(next).catch(err => console.error('Gagal menyimpan list:', err));
+    };
 
     const addFromSuggestion = (text: string) => {
         if (personalItems.some(item => item.text === text)) return;
-        setPersonalItems(prev => [{
+        persistPersonal([{
             id: `personal-${Date.now()}`,
             text,
             checked: false,
             section: 'personal'
-        }, ...prev]);
+        }, ...personalItems]);
     };
 
     const addPersonalItem = () => {
         if (!newItemText.trim()) return;
-        setPersonalItems(prev => [{
+        persistPersonal([{
             id: `personal-${Date.now()}`,
             text: newItemText.trim(),
             checked: false,
             section: 'personal'
-        }, ...prev]);
+        }, ...personalItems]);
         setNewItemText('');
     };
 
@@ -96,38 +89,35 @@ export default function ShopScreen() {
                 item.id === id ? { ...item, checked: !item.checked } : item
             ));
         } else {
-            setPersonalItems(prev => prev.map(item =>
+            persistPersonal(personalItems.map(item =>
                 item.id === id ? { ...item, checked: !item.checked } : item
             ));
         }
     };
 
     const deletePersonalItem = (id: string) => {
-        setPersonalItems(prev => prev.filter(item => item.id !== id));
+        persistPersonal(personalItems.filter(item => item.id !== id));
     };
 
     const handleMarkAsPurchased = async () => {
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) return;
-
         const checkedFridgeItems = fridgeItems.filter(i => i.checked);
         const checkedPersonalItems = personalItems.filter(i => i.checked);
         const totalChecked = checkedFridgeItems.length + checkedPersonalItems.length;
 
         if (totalChecked === 0) {
-            if (Platform.OS === 'web') alert('Centang item yang sudah dibeli terlebih dahulu.');
-            else Alert.alert('Info', 'Centang item yang sudah dibeli terlebih dahulu.');
+            if (Platform.OS === 'web') alert('Check the items that have been purchased first.');
+            else Alert.alert('Info', 'Check the items that have been purchased first.');
             return;
         }
 
-        const confirmMsg = `${totalChecked} item akan ditandai sudah dibeli.${checkedFridgeItems.length > 0 ? `\n\n${checkedFridgeItems.length} item dari kulkas akan dihapus dari inventaris.` : ''}`;
+        const confirmMsg = `${totalChecked} items will be marked as purchased.${checkedFridgeItems.length > 0 ? `\n\n${checkedFridgeItems.length} items from the fridge will be deleted from the inventory.` : ''}`;
 
         const proceed = Platform.OS === 'web'
             ? window.confirm(confirmMsg)
             : await new Promise<boolean>(resolve => {
-                Alert.alert("Konfirmasi Pembelian", confirmMsg, [
-                    { text: "Batal", onPress: () => resolve(false) },
-                    { text: "Sudah Dibeli!", onPress: () => resolve(true), style: 'default' }
+                Alert.alert("Purchase Confirmation", confirmMsg, [
+                    { text: "Cancel", onPress: () => resolve(false) },
+                    { text: "Purchased!", onPress: () => resolve(true), style: 'default' }
                 ]);
             });
 
@@ -135,22 +125,22 @@ export default function ShopScreen() {
 
         setIsProcessing(true);
         try {
-            // Delete checked fridge items from Firestore
+            // Delete checked fridge items dari inventory lokal
             for (const item of checkedFridgeItems) {
-                const firestoreId = item.id.replace('fridge-', '');
+                const inventoryId = item.id.replace('fridge-', '');
                 try {
-                    await deleteDoc(doc(db, 'inventory', firestoreId));
-                } catch (e) {
-                    console.warn('Could not delete:', firestoreId);
+                    await deleteInventoryItem(inventoryId);
+                } catch {
+                    console.warn('Could not delete:', inventoryId);
                 }
             }
 
             // Remove checked personal items from list
-            setPersonalItems(prev => prev.filter(i => !i.checked));
+            persistPersonal(personalItems.filter(i => !i.checked));
 
-            const msg = `✅ ${totalChecked} item berhasil diperbarui!`;
+            const msg = `✅ ${totalChecked} items successfully updated!`;
             if (Platform.OS === 'web') alert(msg);
-            else Alert.alert("Berhasil!", msg);
+            else Alert.alert("Success!", msg);
         } catch (error) {
             console.error('Error marking as purchased:', error);
         } finally {
@@ -163,7 +153,7 @@ export default function ShopScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Shopping List 🛒</Text>
-                <Text style={styles.headerSubtitle}>Daftar belanja cerdas Anda</Text>
+                <Text style={styles.headerSubtitle}>Your smart shopping list</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -173,7 +163,7 @@ export default function ShopScreen() {
                         <IconSymbol name="plus" size={20} color="#94a3b8" />
                         <TextInput
                             style={styles.input}
-                            placeholder="Tambah item belanja..."
+                            placeholder="Add shopping item..."
                             placeholderTextColor="#94a3b8"
                             value={newItemText}
                             onChangeText={setNewItemText}
@@ -185,7 +175,7 @@ export default function ShopScreen() {
                 {/* Smart Suggestions */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionLabel}>✨ SARAN CEPAT</Text>
+                        <Text style={styles.sectionLabel}>✨ QUICK SUGGESTIONS</Text>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionsRow}>
                         {suggestions.map((s, idx) => (
@@ -202,9 +192,9 @@ export default function ShopScreen() {
                     <View style={styles.section}>
                         <View style={styles.sectionHeaderRow}>
                             <IconSymbol name="refrigerator" size={18} color="#13ec6d" />
-                            <Text style={styles.sectionLabel}>PERLU DIBELI ULANG</Text>
+                            <Text style={styles.sectionLabel}>NEED TO REBUY</Text>
                         </View>
-                        <Text style={styles.sectionHint}>Stok rendah atau mendekati kedaluwarsa</Text>
+                        <Text style={styles.sectionHint}>Low stock or near expiry</Text>
                         {fridgeItems.map(item => (
                             <TouchableOpacity
                                 key={item.id}
@@ -231,11 +221,11 @@ export default function ShopScreen() {
                 <View style={styles.section}>
                     <View style={styles.sectionHeaderRow}>
                         <IconSymbol name="pencil" size={18} color="#64748b" />
-                        <Text style={styles.sectionLabel}>DAFTAR PRIBADI</Text>
+                        <Text style={styles.sectionLabel}>PERSONAL LIST</Text>
                     </View>
                     {personalItems.length === 0 ? (
                         <View style={styles.emptyPersonal}>
-                            <Text style={styles.emptyText}>Belum ada item. Ketik di kolom atas untuk menambahkan.</Text>
+                            <Text style={styles.emptyText}>No items yet. Type in the field above to add.</Text>
                         </View>
                     ) : (
                         personalItems.map(item => (
@@ -277,11 +267,11 @@ export default function ShopScreen() {
                     ) : (
                         <>
                             <IconSymbol name="checkmark.circle.fill" size={22} color="#0f172a" />
-                            <Text style={styles.fabText}>Tandai Sudah Dibeli</Text>
+                            <Text style={styles.fabText}>Mark as Purchased</Text>
                         </>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.fabHint}>Item yang dicentang akan diperbarui di inventaris</Text>
+                <Text style={styles.fabHint}>Checked items will be updated in the inventory</Text>
             </View>
         </View>
     );
@@ -321,7 +311,7 @@ const styles = StyleSheet.create({
     emptyText: { fontSize: 13, color: '#94a3b8', textAlign: 'center' },
 
     fabContainer: { position: 'absolute', bottom: Platform.OS === 'web' ? 80 : 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 20, paddingTop: 16, backgroundColor: '#f6f8f7' },
-    fabButton: { flexDirection: 'row', backgroundColor: '#13ec6d', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 8, shadowColor: '#13ec6d', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6 },
+    fabButton: { flexDirection: 'row', backgroundColor: '#13ec6d', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 8, boxShadow: '0 8px 16px rgba(19, 236, 109, 0.3)', elevation: 6 },
     fabText: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
     fabHint: { textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 8 },
 });

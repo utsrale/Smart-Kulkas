@@ -19,8 +19,8 @@ export function ConfirmModal({
     message,
     onConfirm,
     onCancel,
-    confirmText = 'Hapus',
-    cancelText = 'Batal',
+    confirmText = 'Delete',
+    cancelText = 'Cancel',
     type = 'danger'
 }: ConfirmModalProps) {
     return (
@@ -75,10 +75,7 @@ const styles = StyleSheet.create({
         width: '100%',
         maxWidth: 400,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
+        boxShadow: '0 10px 20px rgba(0, 0, 0, 0.1)',
         elevation: 10,
     },
     iconContainer: {

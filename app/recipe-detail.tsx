@@ -1,16 +1,13 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../src/config/firebase';
-import { useAuth } from '../src/contexts/AuthContext';
+import { deleteInventoryItem, getInventoryItems } from '../src/services/localStore';
 import { RecipeSuggestion } from '../src/services/aiService';
 
 export default function RecipeDetailScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { user } = useAuth();
 
     const [recipe, setRecipe] = useState<RecipeSuggestion | null>(null);
     const [checkedFridge, setCheckedFridge] = useState<Set<number>>(new Set());
@@ -47,29 +44,23 @@ export default function RecipeDetailScreen() {
     const handleFinishCooking = async () => {
         if (!recipe) return;
 
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) {
-            Alert.alert("Error", "Anda harus login terlebih dahulu.");
-            return;
-        }
-
         const selectedItems = recipe.fridgeIngredients
             .filter((_, idx) => checkedFridge.has(idx))
             .map(item => item.name);
 
         if (selectedItems.length === 0) {
-            Alert.alert("Peringatan", "Pilih bahan dari kulkas yang sudah Anda gunakan.");
+            Alert.alert("Warning", "Select ingredients from the fridge that you have used.");
             return;
         }
 
-        const confirmMsg = `Bahan berikut akan dihapus dari kulkas Anda:\n\n${selectedItems.map(n => `• ${n}`).join('\n')}\n\nLanjutkan?`;
+        const confirmMsg = `The following ingredients will be deleted from your fridge:\n\n${selectedItems.map(n => `• ${n}`).join('\n')}\n\nContinue?`;
 
         const proceed = Platform.OS === 'web'
             ? window.confirm(confirmMsg)
             : await new Promise<boolean>(resolve => {
-                Alert.alert("Selesai Memasak?", confirmMsg, [
-                    { text: "Batal", onPress: () => resolve(false) },
-                    { text: "Ya, Hapus", onPress: () => resolve(true), style: 'destructive' }
+                Alert.alert("Done Cooking?", confirmMsg, [
+                    { text: "Cancel", onPress: () => resolve(false) },
+                    { text: "Yes, Delete", onPress: () => resolve(true), style: 'destructive' }
                 ]);
             });
 
@@ -77,28 +68,23 @@ export default function RecipeDetailScreen() {
 
         setIsFinishing(true);
         try {
+            const inventory = await getInventoryItems();
             for (const itemName of selectedItems) {
-                const q = query(
-                    collection(db, 'inventory'),
-                    where('userId', '==', uid),
-                    where('itemName', '==', itemName),
-                    where('status', '==', 'active')
-                );
-                const snapshot = await getDocs(q);
-                if (!snapshot.empty) {
-                    await deleteDoc(doc(db, 'inventory', snapshot.docs[0].id));
+                const target = inventory.find(it => it.status === 'active' && it.itemName === itemName);
+                if (target) {
+                    await deleteInventoryItem(target.id);
                 }
             }
 
             if (Platform.OS === 'web') {
-                alert(`✅ Selesai! ${selectedItems.length} bahan telah dihapus dari kulkas.`);
+                alert(`✅ Done! ${selectedItems.length} ingredients have been deleted from the fridge.`);
             } else {
-                Alert.alert("Selesai!", `${selectedItems.length} bahan telah dihapus dari kulkas.`);
+                Alert.alert("Done!", `${selectedItems.length} ingredients have been deleted from the fridge.`);
             }
             router.back();
         } catch (error: any) {
             console.error("Error finishing cooking:", error);
-            Alert.alert("Error", "Gagal memperbarui stok kulkas.");
+            Alert.alert("Error", "Failed to update fridge stock.");
         } finally {
             setIsFinishing(false);
         }
@@ -150,7 +136,7 @@ export default function RecipeDetailScreen() {
                 {/* Fridge Ingredients */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>🧊 Bahan dari Kulkas</Text>
+                        <Text style={styles.sectionTitle}>🧊 Ingredients from Fridge</Text>
                         <View style={styles.countBadge}>
                             <Text style={styles.countText}>{recipe.fridgeIngredients.length} item</Text>
                         </View>
@@ -178,7 +164,7 @@ export default function RecipeDetailScreen() {
                 {/* Pantry Staples */}
                 {recipe.pantryStaples.length > 0 && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitleSmall}>🫙 Bumbu & Bahan Tambahan</Text>
+                        <Text style={styles.sectionTitleSmall}>🫙 Spices & Extras</Text>
                         {recipe.pantryStaples.map((item, idx) => (
                             <TouchableOpacity
                                 key={idx}
@@ -201,7 +187,7 @@ export default function RecipeDetailScreen() {
 
                 {/* Instructions */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitleLarge}>📝 Cara Memasak</Text>
+                    <Text style={styles.sectionTitleLarge}>📝 Cooking Instructions</Text>
                     <View style={styles.timeline}>
                         {recipe.instructions.map((step, idx) => (
                             <View key={idx} style={styles.timelineStep}>
@@ -235,11 +221,11 @@ export default function RecipeDetailScreen() {
                     ) : (
                         <>
                             <IconSymbol name="checkmark.circle.fill" size={22} color="#0f172a" />
-                            <Text style={styles.fabText}>Selesai Masak & Update Kulkas</Text>
+                            <Text style={styles.fabText}>Done Cooking & Update Fridge</Text>
                         </>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.fabHint}>Bahan yang dicentang akan dihapus dari inventaris</Text>
+                <Text style={styles.fabHint}>Checked ingredients will be deleted from current inventory</Text>
             </View>
         </View>
     );
@@ -277,7 +263,7 @@ const styles = StyleSheet.create({
     countText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
 
     // Fridge Items
-    fridgeItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
+    fridgeItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)', elevation: 1 },
     fridgeItemChecked: { opacity: 0.65, backgroundColor: '#f8fafc' },
     fridgeItemContent: { flex: 1 },
     fridgeItemName: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
@@ -303,7 +289,7 @@ const styles = StyleSheet.create({
 
     // FAB
     fabContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 20, paddingTop: 16, backgroundColor: '#f6f8f7' },
-    fabButton: { flexDirection: 'row', backgroundColor: '#13ec6d', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 8, shadowColor: '#13ec6d', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6 },
+    fabButton: { flexDirection: 'row', backgroundColor: '#13ec6d', paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 8, boxShadow: '0 8px 16px rgba(19, 236, 109, 0.3)', elevation: 6 },
     fabText: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
     fabHint: { textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 8 },
 });

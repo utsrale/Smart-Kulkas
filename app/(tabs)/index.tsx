@@ -1,18 +1,15 @@
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useRouter } from 'expo-router';
-import { updateProfile } from 'firebase/auth';
-import { collection, deleteDoc, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../src/config/firebase';
-import { IS_DEMO_MODE, useAuth } from '../../src/contexts/AuthContext';
+import { InventoryItem, deleteInventoryItem, getInventoryItems, getProfile, setProfileName } from '../../src/services/localStore';
 
-const calculateDaysRemaining = (expiredDate: any) => {
+const calculateDaysRemaining = (expiredDate: Date) => {
   if (!expiredDate) return 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const expDate = expiredDate.toDate();
+  const expDate = new Date(expiredDate);
   expDate.setHours(0, 0, 0, 0);
 
   const diffTime = expDate.getTime() - today.getTime();
@@ -20,9 +17,8 @@ const calculateDaysRemaining = (expiredDate: any) => {
 };
 
 export default function InventoryDashboard() {
-  const { user } = useAuth();
   const router = useRouter();
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -32,78 +28,28 @@ export default function InventoryDashboard() {
   const [itemToDelete, setItemToDelete] = useState<{ id: string, name: string } | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
+  const didInitialLoad = useRef(false);
 
-    // Set default name fallback
-    const defaultName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
-    setFirstName(defaultName);
-
-    if (IS_DEMO_MODE) {
-      setTimeout(() => {
-        const createMockDate = (daysToAdd: number) => {
-          const d = new Date();
-          d.setDate(d.getDate() + daysToAdd);
-          return { toDate: () => d };
-        };
-        const mockItems = [
-          { id: '1', itemName: 'Whole Milk', expiredDate: createMockDate(1), status: 'active', category: 'Susu' },
-          { id: '2', itemName: 'Greek Yogurt', expiredDate: createMockDate(4), status: 'active', category: 'Susu' },
-          { id: '3', itemName: 'Spinach', expiredDate: createMockDate(5), status: 'active', category: 'Sayuran' },
-          { id: '4', itemName: 'Apples', expiredDate: createMockDate(10), status: 'active', category: 'Buah' },
-          { id: '5', itemName: 'Carrots', expiredDate: createMockDate(14), status: 'active', category: 'Sayuran' },
-          ...Array(10).fill(null).map((_, i) => ({ id: `fresh-${i}`, itemName: `Fresh Item ${i + 1}`, expiredDate: createMockDate(15), status: 'active', category: 'Lainnya' }))
-        ];
-        setItems(mockItems);
-        setLoading(false);
-      }, 800);
-      return;
-    }
-
-    // Dibatasi ke user.id saja untuk bypass ketiadaan Composite Index Firestore
-    // Sisanya (seperti filtering 'active' dan sorting date) akan ditangani di level klien
-    const q = query(
-      collection(db, 'inventory'),
-      where('userId', '==', user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const inventoryList: any[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Client-side filtering active status
-        if (data.status === 'active') {
-          inventoryList.push({ id: doc.id, ...data });
-        }
-      });
-
-      // Client-side sorting berdasarkan expiredDate 
-      inventoryList.sort((a, b) => {
-        const timeA = a.expiredDate?.toDate()?.getTime() || 0;
-        const timeB = b.expiredDate?.toDate()?.getTime() || 0;
-        return timeA - timeB;
-      });
-      setItems(inventoryList);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching inventory: ", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleMarkAsUsed = async (id: string, itemName: string) => {
-    if (IS_DEMO_MODE) {
-      setItems(prevItems => prevItems.filter(item => item.id !== id));
-      return;
-    }
+  const loadData = useCallback(async () => {
+    if (!didInitialLoad.current) setLoading(true);
     try {
-      await updateDoc(doc(db, 'inventory', id), { status: 'used' });
+      const [inventory, profile] = await Promise.all([getInventoryItems(), getProfile()]);
+      setItems(inventory);
+      setFirstName(profile.name || 'User');
     } catch (error) {
-      console.error("Error updating item: ", error);
+      console.error('Gagal memuat inventory:', error);
+    } finally {
+      didInitialLoad.current = true;
+      setLoading(false);
     }
-  };
+  }, []);
+
+  // Muat ulang setiap kali tab mendapat fokus, agar data dari layar lain ikut ter-refresh
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleMarkAsDeleted = (id: string, itemName: string) => {
     setItemToDelete({ id, name: itemName });
@@ -113,21 +59,15 @@ export default function InventoryDashboard() {
   const confirmDelete = async () => {
     if (!itemToDelete) return;
 
-    const { id, name } = itemToDelete;
+    const { id } = itemToDelete;
     setDeleteModalVisible(false);
 
-    if (IS_DEMO_MODE) {
-      setItems(prevItems => prevItems.filter(item => item.id !== id));
-      setItemToDelete(null);
-      return;
-    }
-
     try {
-      await deleteDoc(doc(db, 'inventory', id));
-      console.log("Successfully deleted:", name);
+      await deleteInventoryItem(id);
+      setItems(prevItems => prevItems.filter(item => item.id !== id));
     } catch (error) {
       console.error("Error deleting item: ", error);
-      Alert.alert("Error", "Gagal menghapus barang.");
+      Alert.alert("Error", "Failed to delete item.");
     } finally {
       setItemToDelete(null);
     }
@@ -142,12 +82,10 @@ export default function InventoryDashboard() {
     setFirstName(newName);
     setIsEditingName(false);
 
-    if (user && (auth as any).currentUser) {
-      try {
-        await updateProfile((auth as any).currentUser, { displayName: newName });
-      } catch (error) {
-        console.error('Failed to update name', error);
-      }
+    try {
+      await setProfileName(newName);
+    } catch (error) {
+      console.error('Failed to update name', error);
     }
   };
 
@@ -265,7 +203,7 @@ export default function InventoryDashboard() {
             ) : (
               <TouchableOpacity onPress={() => { setEditedName(firstName); setIsEditingName(true); }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.title}>{firstName}'s Fridge</Text>
+                  <Text style={styles.title}>{firstName}&apos;s Fridge</Text>
                   <IconSymbol name="pencil" size={20} color="#94a3b8" style={{ marginLeft: 8 }} />
                 </View>
               </TouchableOpacity>
@@ -290,7 +228,7 @@ export default function InventoryDashboard() {
         </View>
 
         {/* Overview Row */}
-        <Text style={styles.sectionTitle}>Overview</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Overview</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewScroll}>
           <View style={[styles.overviewCard, { borderColor: '#f1f5f9', borderWidth: 1 }]}>
             <View style={[styles.overviewIconBg, { backgroundColor: '#13ec6d20' }]}>
@@ -330,7 +268,7 @@ export default function InventoryDashboard() {
         {weekItems.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <IconSymbol name="clock.arrow.circlepath" size={18} color="#ca8a04" />
+              <IconSymbol name="clock.fill" size={18} color="#ca8a04" />
               <Text style={[styles.sectionTitle, { color: '#a16207', marginLeft: 6 }]}>Use Within Week</Text>
             </View>
             {weekItems.map(item => <ItemCard key={item.id} item={item} color="#ca8a04" sectionDaysMax={7} />)}
@@ -365,8 +303,8 @@ export default function InventoryDashboard() {
 
       <ConfirmModal
         visible={deleteModalVisible}
-        title="Hapus Barang"
-        message={`Apakah Anda yakin ingin menghapus ${itemToDelete?.name} dari kulkas?`}
+        title="Delete Item"
+        message={`Are you sure you want to delete ${itemToDelete?.name} from the fridge?`}
         onConfirm={confirmDelete}
         onCancel={() => {
           setDeleteModalVisible(false);
@@ -384,7 +322,7 @@ export default function InventoryDashboard() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowNotifications(false)}>
           <Pressable style={styles.notifModalContent}>
             <View style={styles.notifModalHeader}>
-              <Text style={styles.notifModalTitle}>Notifikasi</Text>
+              <Text style={styles.notifModalTitle}>Notifications</Text>
               <TouchableOpacity onPress={() => setShowNotifications(false)} style={{ padding: 4 }}>
                 <IconSymbol name="xmark" size={20} color="#64748b" />
               </TouchableOpacity>
@@ -393,7 +331,7 @@ export default function InventoryDashboard() {
               {soonItems.length === 0 ? (
                 <View style={{ padding: 32, alignItems: 'center' }}>
                   <IconSymbol name="bell.slash" size={32} color="#cbd5e1" />
-                  <Text style={{ color: '#64748b', marginTop: 12 }}>Belum ada peringatan.</Text>
+                  <Text style={{ color: '#64748b', marginTop: 12 }}>No alerts yet.</Text>
                 </View>
               ) : (
                 soonItems.map((item, index) => (
@@ -406,8 +344,8 @@ export default function InventoryDashboard() {
                         />
                      </View>
                      <View style={{ flex: 1 }}>
-                        <Text style={styles.notifTitle}>{item.days <= 0 ? 'Kedaluwarsa' : 'Segera Kedaluwarsa'}</Text>
-                        <Text style={styles.notifMessage}>{item.days <= 0 ? `${item.itemName} telah kedaluwarsa!` : `${item.itemName} akan kedaluwarsa dalam ${item.days} hari.`}</Text>
+                        <Text style={styles.notifTitle}>{item.days <= 0 ? 'Expired' : 'Expiring Soon'}</Text>
+                        <Text style={styles.notifMessage}>{item.days <= 0 ? `${item.itemName} has expired!` : `${item.itemName} will expire in ${item.days} days.`}</Text>
                      </View>
                   </View>
                 ))
@@ -431,9 +369,9 @@ const styles = StyleSheet.create({
   notificationDot: { position: 'absolute', top: 6, right: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: '#ef4444', borderWidth: 2, borderColor: '#f1f5f9' },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, padding: 14, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' },
   searchInput: { marginLeft: 12, fontSize: 14, color: '#0f172a', flex: 1 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a' },
   overviewScroll: { paddingBottom: 8, gap: 16 },
-  overviewCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, width: 140, marginRight: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
+  overviewCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, width: 140, marginRight: 16, boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', elevation: 1 },
   overviewIconBg: { alignSelf: 'flex-start', padding: 8, borderRadius: 8, marginBottom: 16 },
   overviewValue: { fontSize: 30, fontWeight: 'bold', color: '#0f172a', marginBottom: 2 },
   overviewLabel: { fontSize: 14, fontWeight: '500', color: '#64748b' },
@@ -441,7 +379,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   badgeCritical: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
   badgeCriticalText: { fontSize: 12, fontWeight: '600' },
-  itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', elevation: 1 },
   itemIconBox: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   itemDetails: { flex: 1, marginRight: 12 },
   itemName: { fontSize: 16, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
@@ -453,9 +391,9 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', marginTop: 40 },
   emptyText: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', marginTop: 12 },
   emptySub: { fontSize: 14, color: '#64748b', marginTop: 4 },
-  fab: { position: 'absolute', right: 24, bottom: 96, width: 56, height: 56, borderRadius: 28, backgroundColor: '#13ec6d', justifyContent: 'center', alignItems: 'center', shadowColor: '#13ec6d', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+  fab: { position: 'absolute', right: 24, bottom: 96, width: 56, height: 56, borderRadius: 28, backgroundColor: '#13ec6d', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 10px rgba(19, 236, 109, 0.4)', elevation: 6 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-start', alignItems: 'flex-end', padding: 20, paddingTop: 100 },
-  notifModalContent: { backgroundColor: '#fff', borderRadius: 20, width: 320, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10, overflow: 'hidden' },
+  notifModalContent: { backgroundColor: '#fff', borderRadius: 20, width: 320, boxShadow: '0 10px 20px rgba(0, 0, 0, 0.1)', elevation: 10, overflow: 'hidden' },
   notifModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   notifModalTitle: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
   notifCard: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f8fafc' },

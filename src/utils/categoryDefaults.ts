@@ -9,47 +9,47 @@ export interface CategoryInfo {
 
 export const CATEGORIES: Record<string, CategoryInfo> = {
     sayur: {
-        label: 'Sayuran',
+        label: 'Vegetables',
         defaultShelfLifeDays: 4,
         icon: '🥬',
     },
     buah: {
-        label: 'Buah-buahan',
+        label: 'Fruits',
         defaultShelfLifeDays: 5,
         icon: '🍎',
     },
     daging: {
-        label: 'Daging',
+        label: 'Meat',
         defaultShelfLifeDays: 3,
         icon: '🥩',
     },
     ikan: {
-        label: 'Ikan & Seafood',
+        label: 'Seafood',
         defaultShelfLifeDays: 2,
         icon: '🐟',
     },
     susu: {
-        label: 'Susu & Dairy',
+        label: 'Dairy',
         defaultShelfLifeDays: 7,
         icon: '🥛',
     },
     telur: {
-        label: 'Telur',
+        label: 'Eggs',
         defaultShelfLifeDays: 14,
         icon: '🥚',
     },
     bumbu: {
-        label: 'Bumbu & Rempah',
+        label: 'Spices',
         defaultShelfLifeDays: 30,
         icon: '🧄',
     },
     minuman: {
-        label: 'Minuman',
+        label: 'Beverages',
         defaultShelfLifeDays: 14,
         icon: '🧃',
     },
     lainnya: {
-        label: 'Lainnya',
+        label: 'Others',
         defaultShelfLifeDays: 7,
         icon: '📦',
     },

@@ -1,19 +1,28 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Mengatur tingkah laku notifikasi saat app sedang dibuka
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+// expo-notifications diimport secara lazy (dinamis): module tersebut punya
+// side-effect saat dievaluasi yang memicu warning "[expo-notifications] Listening
+// to push token changes is not yet fully supported on web." di console web.
+// Dengan lazy import, expo-notifications tidak pernah dimuat di platform web.
+async function getNotifications() {
+    return await import('expo-notifications');
+}
 
 export async function requestNotificationPermission() {
     if (Platform.OS === 'web') return false;
+
+    const Notifications = await getNotifications();
+
+    // Mengatur tingkah laku notifikasi saat app sedang dibuka
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+        }),
+    });
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -45,6 +54,8 @@ export async function scheduleExpiryNotification(itemName: string, daysLeft: num
         bodyText = `Jangan lupa bahan ${itemName} ini masih segar untuk diolah!`;
     }
 
+    const Notifications = await getNotifications();
+
     await Notifications.scheduleNotificationAsync({
         content: {
             title: "Smart Kulkas Reminder 🥦",
@@ -60,5 +71,6 @@ export async function scheduleExpiryNotification(itemName: string, daysLeft: num
 
 export async function cancelAllNotifications() {
     if (Platform.OS === 'web') return;
+    const Notifications = await getNotifications();
     await Notifications.cancelAllScheduledNotificationsAsync();
 }

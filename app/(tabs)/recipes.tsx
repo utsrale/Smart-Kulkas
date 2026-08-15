@@ -1,46 +1,45 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useRouter } from 'expo-router';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../src/config/firebase';
-import { useAuth } from '../../src/contexts/AuthContext';
+import { getInventoryItems } from '../../src/services/localStore';
 import { generateRecipes, RecipeSuggestion } from '../../src/services/aiService';
 
 export default function RecipesScreen() {
     const router = useRouter();
-    const { user } = useAuth();
     const [ingredients, setIngredients] = useState<string[]>([]);
     const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
+    // Menandai bahwa user sudah pernah memilih manual, agar auto-select hanya terjadi sekali di awal
+    const hasSelectedRef = useRef(false);
     const [recipes, setRecipes] = useState<RecipeSuggestion[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    useEffect(() => {
-        const uid = user?.uid || (auth as any).currentUser?.uid;
-        if (!uid) return;
+    const loadIngredients = useCallback(async () => {
+        try {
+            const inventory = await getInventoryItems();
+            const items = inventory
+                .filter(item => item.status === 'active')
+                .map(item => item.itemName);
 
-        const q = query(
-            collection(db, 'inventory'),
-            where('userId', '==', uid)
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const items = snapshot.docs
-                .filter(doc => doc.data().status === 'active')
-                .map(doc => doc.data().itemName as string);
-            
             const uniqueItems = Array.from(new Set(items)).sort();
             setIngredients(uniqueItems);
             // By default, select all if none were selected before
-            if (selectedIngredients.length === 0 && uniqueItems.length > 0) {
+            if (!hasSelectedRef.current && uniqueItems.length > 0) {
                 setSelectedIngredients(uniqueItems);
             }
-        });
+        } catch (error) {
+            console.error('Gagal memuat bahan:', error);
+        }
+    }, []);
 
-        return () => unsubscribe();
-    }, [user]);
+    useFocusEffect(
+        useCallback(() => {
+            loadIngredients();
+        }, [loadIngredients])
+    );
 
     const toggleIngredient = (name: string) => {
+        hasSelectedRef.current = true;
         if (selectedIngredients.includes(name)) {
             setSelectedIngredients(selectedIngredients.filter(i => i !== name));
         } else {
@@ -48,12 +47,18 @@ export default function RecipesScreen() {
         }
     };
 
-    const handleSelectAll = () => setSelectedIngredients([...ingredients]);
-    const handleClearAll = () => setSelectedIngredients([]);
+    const handleSelectAll = () => {
+        hasSelectedRef.current = true;
+        setSelectedIngredients([...ingredients]);
+    };
+    const handleClearAll = () => {
+        hasSelectedRef.current = true;
+        setSelectedIngredients([]);
+    };
 
     const handleGenerateRecipes = async () => {
         if (selectedIngredients.length === 0) {
-            Alert.alert("Pilih Bahan", "Silakan pilih setidaknya satu bahan untuk meracik resep!");
+            Alert.alert("Select Ingredients", "Please select at least one ingredient to generate recipes!");
             return;
         }
 
@@ -63,7 +68,7 @@ export default function RecipesScreen() {
             const results = await generateRecipes(selectedIngredients);
             setRecipes(results);
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Gagal mendapatkan resep dari Gemini AI.");
+            Alert.alert("Error", error.message || "Failed to get recipes from Gemini AI.");
         } finally {
             setIsLoading(false);
         }
@@ -82,8 +87,8 @@ export default function RecipesScreen() {
                 </View>
                 <Text style={styles.headerSubtitle}>
                     {ingredients.length > 0
-                        ? `Pilih bahan yang ingin Anda gunakan dari ${ingredients.length} item di kulkas.`
-                        : "Kulkas Anda kosong. Tambahkan bahan dulu!"}
+                        ? `Select the ingredients you want to use from ${ingredients.length} items in the fridge.`
+                        : "Your fridge is empty. Add ingredients first!"}
                 </Text>
             </View>
 
@@ -92,14 +97,14 @@ export default function RecipesScreen() {
                 {ingredients.length > 0 && (
                     <View style={styles.selectionSection}>
                         <View style={styles.selectionHeader}>
-                            <Text style={styles.selectionTitle}>Pilih Bahan Masakan</Text>
+                            <Text style={styles.selectionTitle}>Select Cooking Ingredients</Text>
                             <View style={styles.selectionActions}>
                                 <TouchableOpacity onPress={handleSelectAll}>
-                                    <Text style={styles.actionText}>Pilih Semua</Text>
+                                    <Text style={styles.actionText}>Select All</Text>
                                 </TouchableOpacity>
                                 <View style={styles.divider} />
                                 <TouchableOpacity onPress={handleClearAll}>
-                                    <Text style={styles.actionText}>Hapus</Text>
+                                    <Text style={styles.actionText}>Clear</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -137,7 +142,7 @@ export default function RecipesScreen() {
                         <>
                             <IconSymbol name="book.fill" size={20} color="#fff" />
                             <Text style={styles.generateBtnText}>
-                                Buat Resep ({selectedIngredients.length} Bahan)
+                                Generate Recipes ({selectedIngredients.length} Ingredients)
                             </Text>
                         </>
                     )}
@@ -169,7 +174,7 @@ export default function RecipesScreen() {
                                 </View>
                             </View>
                             <View style={styles.viewRecipeBtn}>
-                                <Text style={styles.viewRecipeText}>Buka Detail Resep</Text>
+                                <Text style={styles.viewRecipeText}>Open Recipe Details</Text>
                                 <IconSymbol name="chevron.right" size={16} color="#8e44ad" />
                             </View>
                         </TouchableOpacity>
@@ -181,7 +186,7 @@ export default function RecipesScreen() {
                         <View style={styles.emptyIconCircle}>
                             <IconSymbol name="refrigerator" size={40} color="#cbd5e1" />
                         </View>
-                        <Text style={styles.emptyText}>Pilih bahan di atas kemudian tekan tombol ungu untuk mulai meracik resep terbaik!</Text>
+                        <Text style={styles.emptyText}>Select ingredients above then press the purple button to start mixing the best recipes!</Text>
                     </View>
                 )}
             </ScrollView>
@@ -206,18 +211,18 @@ const styles = StyleSheet.create({
     divider: { width: 1, height: 12, backgroundColor: '#e2e8f0' },
     
     chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+    chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)', elevation: 2 },
     chipSelected: { backgroundColor: '#f5f3ff', borderColor: '#8e44ad', borderWidth: 1.5 },
     checkbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
     checkboxSelected: { backgroundColor: '#8e44ad', borderColor: '#8e44ad' },
     chipText: { fontSize: 14, fontWeight: '600', color: '#475569' },
     chipTextSelected: { color: '#5b21b6', fontWeight: '700' },
     
-    generateBtn: { flexDirection: 'row', backgroundColor: '#8e44ad', paddingVertical: 18, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 32, shadowColor: '#8e44ad', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 15, elevation: 8 },
+    generateBtn: { flexDirection: 'row', backgroundColor: '#8e44ad', paddingVertical: 18, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 32, boxShadow: '0 8px 15px rgba(142, 68, 173, 0.25)', elevation: 8 },
     generateBtnText: { color: '#fff', fontSize: 17, fontWeight: '800' },
     
     recipeList: { gap: 20 },
-    recipeCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
+    recipeCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#f1f5f9', boxShadow: '0 4px 10px rgba(0, 0, 0, 0.06)', elevation: 3 },
     recipeHeader: { marginBottom: 12 },
     recipeTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
     recipeDesc: { fontSize: 14, color: '#64748b', lineHeight: 22, marginBottom: 16 },
