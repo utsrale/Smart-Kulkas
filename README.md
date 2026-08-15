@@ -2,7 +2,7 @@
 
 Smart Kulkas is a modern, cross-platform React Native (Expo) application designed to help users track their refrigerator inventory, reduce food waste, and generate creative recipes using AI based on the ingredients they already have.
 
-The application leverages **Firebase** for backend services (Authentication, Firestore Database) and integrates powerful AI features via **Google Gemini** (with OpenRouter fallback).
+The app is **fully local-first**: your data lives in your device's storage (AsyncStorage), with no account or backend required. AI features (category prediction, recipe suggestions, waste-reduction tips) are powered by **Google Gemini**, with an **OpenRouter** fallback.
 
 ---
 
@@ -39,22 +39,14 @@ The application leverages **Firebase** for backend services (Authentication, Fir
     ```
 
 3.  **Setup Environment Variables**:
-    *   Rename the `.env.example` file to `.env` in the root directory.
-    *   Fill in your Firebase config values and API keys.
+    *   Copy `.env.example` to `.env` in the root directory (`.env` is gitignored — never commit it).
+    *   Fill in your AI keys (see [AI Integration](#ai-integration-gemini--openrouter) below).
     ```env
-    # Firebase configuration
-    EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
-    EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-    EXPO_PUBLIC_FIREBASE_DATABASE_URL=https://your_project_id.firebaseio.com
-    EXPO_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-    EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-    EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-    EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
-    EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+    # Required — Google Gemini API key (get one at https://aistudio.google.com/apikey)
+    EXPO_PUBLIC_GEMINI_API_KEY=
 
-    # AI configuration
-    EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-    EXPO_PUBLIC_OPENROUTER_API_KEY=your_openrouter_api_key
+    # Optional — OpenRouter fallback key (get one at https://openrouter.ai/keys)
+    EXPO_PUBLIC_OPENROUTER_API_KEY=
     ```
 
 ### Running the App
@@ -71,43 +63,25 @@ npx expo start
 
 ---
 
-## 🔥 Backend Setup (Firebase)
+## 🧠 AI Integration (Gemini + OpenRouter)
 
-To unlock real functionality, you need to link your own Firebase project:
+AI features (category prediction, recipe suggestions, waste-reduction tips) need an API key. Without a key the app still works — those features just show a friendly fallback.
 
-1.  Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
-2.  Enable **Email/Password Authentication** in the Authentication section.
-3.  Enable **Firestore Database** in test mode, or setup appropriate security rules specifically allowing read/write operations for authenticated users.
+1.  **Required — Google Gemini** (primary):
+    *   Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
+    *   Set it as `EXPO_PUBLIC_GEMINI_API_KEY` in your `.env`.
+2.  **Optional — OpenRouter** (fallback):
+    *   Used automatically when Gemini is unavailable or hits its quota.
+    *   Get a key at [OpenRouter](https://openrouter.ai/keys) and set it as `EXPO_PUBLIC_OPENROUTER_API_KEY`.
 
-Example Firestore Rules:
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /inventory/{document} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null;
-    }
-    match /users/{document} {
-      allow read, write: if request.auth != null && request.auth.uid == document;
-    }
-  }
-}
-```
-
-## 🧠 AI Integration (Gemini)
-
-1. Get an API key from [Google AI Studio](https://aistudio.google.com/).
-2. Add the key to `EXPO_PUBLIC_GEMINI_API_KEY` in your `.env` file.
-3. (*Optional*) The app includes a fallback to OpenRouter. Get a free key from OpenRouter to ensure 100% uptime when Gemini quotas are hit.
+> ⚠️ `EXPO_PUBLIC_*` values are inlined into the app bundle at build time, so they are extractable from a built app/APK. That is acceptable for a personal app; treat the keys as public values and never rely on them as a secret. For real secrecy, route AI calls through a small proxy server.
 
 ---
 
 ## 🛠️ Built With
 
 *   **React Native** & **Expo**
-*   **Firebase** (Auth, Firestore)
-*   **Google Gemini AI**
+*   **Google Gemini AI** (with OpenRouter fallback)
 *   **React Native SVG** & **Victory Native** (for Analytics Charts)
 *   **Expo Router** (for Navigation)
 
