@@ -2,17 +2,18 @@ import '@/src/utils/silenceKnownWarnings'; // tekan warning pointerEvents dari r
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
 
+import SplashScreen from '@/components/splash-screen';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/src/contexts/AuthContext';
 import { initI18n } from '@/src/i18n';
 import { requestNotificationPermission } from '@/src/utils/notifications';
 
 export const unstable_settings = {
-  anchor: 'splash',
+  anchor: '(tabs)',
 };
 
 function RootLayoutNav() {
@@ -27,7 +28,6 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
-        <Stack.Screen name="splash" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="add" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="recipe-detail" options={{ headerShown: false }} />
@@ -40,10 +40,13 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [i18nReady, setI18nReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     initI18n().then(() => setI18nReady(true));
   }, []);
+
+  const finishSplash = useCallback(() => setSplashDone(true), []);
 
   if (!i18nReady) {
     return (
@@ -56,6 +59,8 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <RootLayoutNav />
+      {/* Halaman awal: overlay di atas stack, hilang otomatis 2 detik / saat di-tap */}
+      {!splashDone && <SplashScreen onFinish={finishSplash} />}
     </AuthProvider>
   );
 }

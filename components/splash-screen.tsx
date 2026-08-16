@@ -1,27 +1,16 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { usePathname, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-// Halaman awal ber-brand: logo (kulkas + daun) seperti di halaman login lama,
-// tampil singkat lalu otomatis masuk ke tabs. Tap di mana saja untuk skip.
-export default function SplashScreen() {
-    const router = useRouter();
-    const pathname = usePathname();
+// Halaman awal ber-brand: logo (kulkas + daun) seperti di halaman login lama.
+// Dirender sebagai overlay di root layout (bukan rute) agar bekerja identik
+// di dev server maupun static export. Tap di mana saja untuk skip.
+export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     const { t } = useTranslation();
 
     const opacity = useRef(new Animated.Value(0)).current;
     const scale = useRef(new Animated.Value(0.9)).current;
-
-    const goToApp = useCallback(() => {
-        // Start normal (dibuka di root / splash): lanjut ke tabs.
-        // Kalau dibuka lewat deep link (mis. /add atau /settings), biarkan saja —
-        // navigator sudah menuju halaman tujuan tersebut.
-        if (pathname === '/splash' || pathname === '/') {
-            router.replace('/(tabs)');
-        }
-    }, [pathname, router]);
 
     useEffect(() => {
         Animated.parallel([
@@ -29,12 +18,13 @@ export default function SplashScreen() {
             Animated.spring(scale, { toValue: 1, friction: 6, useNativeDriver: true }),
         ]).start();
 
-        const timer = setTimeout(goToApp, 2000);
+        const timer = setTimeout(onFinish, 2000);
         return () => clearTimeout(timer);
-    }, [goToApp, opacity, scale]); // opacity & scale stabil (dari useRef)
+        // onFinish stabil (useCallback dari parent); opacity/scale stabil dari useRef
+    }, [onFinish, opacity, scale]);
 
     return (
-        <Pressable style={styles.container} onPress={goToApp}>
+        <Pressable style={styles.container} onPress={onFinish}>
             <Animated.View style={[styles.content, { opacity, transform: [{ scale }] }]}>
                 {/* Logo — identik dengan halaman login lama */}
                 <View style={styles.logoCircle}>
