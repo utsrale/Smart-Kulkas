@@ -57,6 +57,9 @@ const MAPPING: Record<string, MaterialIconName> = {
   'cup.and.saucer.fill': 'local-cafe',
   'flame.fill': 'whatshot',
   'rectangle.portrait.and.arrow.right': 'logout',
+  'fish.fill': 'set-meal',
+  'carton.fill': 'local-drink',
+  'drop.fill': 'water-drop',
 };
 
 type IconSymbolName = keyof typeof MAPPING;

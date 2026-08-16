@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+import i18n, { getAiLanguageName } from "@/src/i18n";
+
 /**
  * AI Service for Smart Inventory Kulkas
  * Primary: Gemini AI (Google) — Free tier
@@ -151,7 +153,7 @@ Output MUST be a valid JSON object with the following fields:
 - categoryKey: One of [sayur, buah, daging, ikan, susu, telur, bumbu, minuman, lainnya]
 - shelfLifeDays: Integer (number of days it lasts)
 - confidence: Float (e.g. 0.9)
-- reason: A short explanation in English (e.g., "UHT milk lasts longer due to the sterilization process.").
+- reason: A short explanation in ${getAiLanguageName()} (e.g., "UHT milk lasts longer due to the sterilization process.").
 
 Respond only with JSON. Do NOT wrap with markdown blocks.
 `;
@@ -159,7 +161,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
             let text = response.text();
@@ -169,7 +171,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
                 categoryKey: parsed.categoryKey || 'lainnya',
                 shelfLifeDays: parsed.shelfLifeDays || 7,
                 confidence: parsed.confidence || 0.8,
-                reason: parsed.reason || "Based on Gemini AI analysis."
+                reason: parsed.reason || i18n.t('ai.predictReason')
             };
         } catch (geminiError: any) {
             console.warn("[Gemini] ⚠️ Failed:", geminiError.message?.substring(0, 100));
@@ -186,7 +188,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
             categoryKey: parsed.categoryKey || 'lainnya',
             shelfLifeDays: parsed.shelfLifeDays || 7,
             confidence: parsed.confidence || 0.8,
-            reason: parsed.reason || "Based on AI analysis (Backup)."
+            reason: parsed.reason || i18n.t('ai.predictReasonBackup')
         };
     } catch (fallbackError: any) {
         console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
@@ -194,7 +196,7 @@ Respond only with JSON. Do NOT wrap with markdown blocks.
             categoryKey: 'lainnya',
             shelfLifeDays: 7,
             confidence: 0.1,
-            reason: "AI is currently unavailable. Please try again later."
+            reason: i18n.t('ai.predictUnavailable')
         };
     }
 };
@@ -211,20 +213,20 @@ export const generateRecipes = async (ingredients: string[]): Promise<RecipeSugg
 You are a five-star professional chef. I have the following cooking ingredients in my fridge:
 ${ingredients.join(", ")}
 
-Give me exactly 3 delicious recipe ideas in English that primarily use these ingredients. 
+Give me exactly 3 delicious recipe ideas in ${getAiLanguageName()} that primarily use these ingredients. 
 You are allowed to add other common spices/complementary ingredients (like salt, sugar, onion, oil, sauce, etc.) that I might not have mentioned, to make the dish perfect.
 
 Output MUST be a strictly valid JSON ARRAY of objects. Each object MUST have these properties:
-- title: String (Name of the dish in English)
-- description: String (1 engaging descriptive sentence in English)
+- title: String (Name of the dish in ${getAiLanguageName()})
+- description: String (1 engaging descriptive sentence in ${getAiLanguageName()})
 - prepTime: String (Estimated time, e.g. "30 Minutes")
 - difficulty: String (Easy / Medium / Hard)
 - calories: String (Estimated calories per serving, e.g. "450 kcal")
-- imageKeyword: String (2-3 keywords in English to describe this dish, e.g. "fried rice plate")
-- fridgeIngredients: Array of objects {name: String, amount: String} (ingredients taken from my fridge list in English)
-- pantryStaples: Array of Strings (additional common spices/ingredients you suggest in English, e.g. "Salt to taste")
-- ingredients: Array of Strings (ALL complete ingredients in English)
-- instructions: Array of Strings (Concise but clear cooking steps in English)
+- imageKeyword: String (2-3 keywords in ${getAiLanguageName()} to describe this dish, e.g. "fried rice plate")
+- fridgeIngredients: Array of objects {name: String, amount: String} (ingredients taken from my fridge list in ${getAiLanguageName()})
+- pantryStaples: Array of Strings (additional common spices/ingredients you suggest in ${getAiLanguageName()}, e.g. "Salt to taste")
+- ingredients: Array of Strings (ALL complete ingredients in ${getAiLanguageName()})
+- instructions: Array of Strings (Concise but clear cooking steps in ${getAiLanguageName()})
 
 Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
 `;
@@ -234,7 +236,7 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
         const parsed = JSON.parse(cleaned) as any[];
         return parsed.map((item, index) => ({
             id: `${prefix}-${Date.now()}-${index}`,
-            title: item.title || "Untitled Recipe",
+            title: item.title || i18n.t('ai.untitledRecipe'),
             description: item.description || "",
             prepTime: item.prepTime || "-",
             difficulty: item.difficulty || "Easy",
@@ -250,7 +252,7 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
             let text = response.text();
@@ -268,7 +270,7 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
         return parseRecipes(text, "recipe-backup");
     } catch (fallbackError: any) {
         console.error("[OpenRouter] ❌ Backup also failed:", fallbackError.message);
-        throw new Error("Failed to get recipes from both AI servers. Please try again later. 👨‍🍳");
+        throw new Error(i18n.t('ai.errorRecipes'));
     }
 };
 
@@ -277,12 +279,12 @@ Respond only with JSON ARRAY. Do NOT wrap with markdown blocks.
  * Generates a smart sustainability tip. Tries Gemini first, then OpenRouter.
  */
 export const generateSustainabilityTips = async (wastedItems: string[], consumedItems: string[]): Promise<string> => {
-    const systemPrompt = "You are a reliable environment and food waste reduction expert. Give a short and practical tip in English.";
+    const systemPrompt = `You are a reliable environment and food waste reduction expert. Give a short and practical tip in ${getAiLanguageName()}.`;
     const prompt = `
 This Smart Fridge app user just wasted the following ingredients (due to expiration): ${wastedItems.length > 0 ? wastedItems.join(", ") : "None!"}
 And they managed to consume the following ingredients before expiring: ${consumedItems.length > 0 ? consumedItems.join(", ") : "No data yet."}
 
-Give EXACTLY ONE sentence of tip or motivation (maximum 2 short sentences) in English that:
+Give EXACTLY ONE sentence of tip or motivation (maximum 2 short sentences) in ${getAiLanguageName()} that:
 - Is very specific and relevant to the ingredients they wasted (if any).
 - Gives praise if they didn't waste many items.
 - Is practical and can be directly applied in the kitchen (e.g. how to store certain ingredients to last longer).
@@ -290,12 +292,12 @@ Give EXACTLY ONE sentence of tip or motivation (maximum 2 short sentences) in En
 Do not use list formatting, markdown, or opening/closing greetings. Just directly give the tip.
 `;
 
-    const defaultTip = "Place new ingredients at the back of the fridge (First In, First Out method) so older ingredients are used first!";
+    const defaultTip = i18n.t('ai.defaultTip');
 
     // --- Try Gemini first ---
     if (API_KEY && API_KEY !== "YOUR_GEMINI_API_KEY_HERE") {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
             const result = await model.generateContent(prompt);
             const response = await result.response;
             return response.text().trim().replace(/['"]/g, '');

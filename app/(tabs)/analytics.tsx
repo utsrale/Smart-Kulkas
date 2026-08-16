@@ -1,10 +1,12 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { getInventoryItems } from '../../src/services/localStore';
 import { generateSustainabilityTips } from '../../src/services/aiService';
+import { normalizeCategoryKey } from '../../src/utils/categoryDefaults';
 
 interface CategoryStat {
     name: string;
@@ -16,6 +18,7 @@ interface CategoryStat {
 }
 
 export default function AnalyticsScreen() {
+    const { t } = useTranslation();
     const [totalItems, setTotalItems] = useState(0);
     const [activeItems, setActiveItems] = useState(0);
     const [expiredItems, setExpiredItems] = useState(0);
@@ -40,7 +43,8 @@ export default function AnalyticsScreen() {
                 if (item.status !== 'active') return;
 
                 total++;
-                const category = item.category || 'Lainnya';
+                // Kategori tersimpan sebagai key (data lama otomatis dimigrasi oleh localStore)
+                const category = normalizeCategoryKey(item.category);
 
                 if (!catMap[category]) catMap[category] = { total: 0, expired: 0, items: [] };
                 catMap[category].total++;
@@ -65,15 +69,17 @@ export default function AnalyticsScreen() {
             setExpiredItems(expired);
             setNearExpiryItems(nearExpiry);
 
-            // Build category stats (top wasted)
+            // Build category stats (top wasted) — ikon/warna dipetakan per key kategori
             const catColors: Record<string, { icon: any; color: string; bg: string }> = {
-                'Sayuran & Buah': { icon: 'leaf.fill', color: '#16a34a', bg: '#dcfce7' },
-                'Protein': { icon: 'fork.knife', color: '#dc2626', bg: '#fee2e2' },
-                'Susu & Telur': { icon: 'egg.fill', color: '#2563eb', bg: '#dbeafe' },
-                'Roti & Kue': { icon: 'bag.fill', color: '#9333ea', bg: '#f3e8ff' },
-                'Minuman': { icon: 'cup.and.saucer.fill', color: '#0891b2', bg: '#cffafe' },
-                'Bumbu & Saus': { icon: 'flame.fill', color: '#ea580c', bg: '#ffedd5' },
-                'Lainnya': { icon: 'archivebox.fill', color: '#64748b', bg: '#f1f5f9' },
+                sayur: { icon: 'leaf.fill', color: '#16a34a', bg: '#dcfce7' },
+                buah: { icon: 'applelogo', color: '#ea580c', bg: '#ffedd5' },
+                daging: { icon: 'fork.knife', color: '#dc2626', bg: '#fee2e2' },
+                ikan: { icon: 'fish.fill', color: '#0891b2', bg: '#cffafe' },
+                susu: { icon: 'carton.fill', color: '#2563eb', bg: '#dbeafe' },
+                telur: { icon: 'egg.fill', color: '#d97706', bg: '#fef3c7' },
+                bumbu: { icon: 'flame.fill', color: '#9333ea', bg: '#f3e8ff' },
+                minuman: { icon: 'drop.fill', color: '#0ea5e9', bg: '#e0f2fe' },
+                lainnya: { icon: 'archivebox.fill', color: '#64748b', bg: '#f1f5f9' },
             };
 
             const stats: CategoryStat[] = Object.entries(catMap)
@@ -81,14 +87,14 @@ export default function AnalyticsScreen() {
                 .sort((a, b) => b[1].expired - a[1].expired)
                 .slice(0, 3)
                 .map(([name, val]) => {
-                    const c = catColors[name] || catColors['Lainnya'];
+                    const c = catColors[name] || catColors['lainnya'];
                     return {
-                        name,
+                        name, // tetap key — dirender via t('category.' + name)
                         icon: c.icon,
                         color: c.color,
                         bgColor: c.bg,
                         wastedKg: Number((val.expired * 0.35).toFixed(1)),
-                        detail: val.items.slice(0, 2).join(' & ') || 'Expired items',
+                        detail: val.items.slice(0, 2).join(' & ') || t('analytics.expiredDetail'),
                     };
                 });
             setCategoryStats(stats);
@@ -98,18 +104,19 @@ export default function AnalyticsScreen() {
                 tipFetchedRef.current = true;
                 setIsLoadingTip(true);
                 const wastedList = Object.entries(catMap).filter(([_, v]) => v.expired > 0).flatMap(([_, v]) => v.items);
-                const consumedList = Object.entries(catMap).filter(([_, v]) => v.total > v.expired).map(([k, _]) => k); // Just categories to save prompt tokens
+                // Kirim nama kategori yang sudah diterjemahkan agar prompt AI terbaca jelas
+                const consumedList = Object.entries(catMap).filter(([_, v]) => v.total > v.expired).map(([k]) => t('category.' + k));
 
                 generateSustainabilityTips(wastedList.slice(0, 5), consumedList.slice(0, 5))
                     .then(tip => setAiTip(tip))
-                    .catch(() => setAiTip("Use the First In, First Out method for your food!"))
+                    .catch(() => setAiTip(t('analytics.tipError')))
                     .finally(() => setIsLoadingTip(false));
             }
 
         } catch (error) {
             console.error('Gagal memuat statistik:', error);
         }
-    }, []);
+    }, [t]);
 
     useFocusEffect(
         useCallback(() => {
@@ -136,15 +143,15 @@ export default function AnalyticsScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Sustainability Report 🌿</Text>
-                <Text style={styles.headerSubtitle}>Monitor your positive impact on the environment</Text>
+                <Text style={styles.headerTitle}>{t('analytics.title')}</Text>
+                <Text style={styles.headerSubtitle}>{t('analytics.subtitle')}</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
                 {/* Donut Chart Card */}
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Consumed vs Wasted</Text>
+                    <Text style={styles.cardTitle}>{t('analytics.consumedVsWasted')}</Text>
                     <View style={styles.chartRow}>
                         <View style={styles.chartContainer}>
                             <Svg width={130} height={130} viewBox="0 0 120 120">
@@ -169,7 +176,7 @@ export default function AnalyticsScreen() {
                             </Svg>
                             <View style={styles.chartCenter}>
                                 <Text style={styles.chartBig}>{totalKg}</Text>
-                                <Text style={styles.chartLabel}>TOTAL KG</Text>
+                                <Text style={styles.chartLabel}>{t('analytics.totalKg')}</Text>
                             </View>
                         </View>
 
@@ -177,14 +184,14 @@ export default function AnalyticsScreen() {
                             <View style={styles.legendItem}>
                                 <View style={[styles.legendDot, { backgroundColor: '#13ec6d' }]} />
                                 <View>
-                                    <Text style={styles.legendLabel}>Consumed</Text>
+                                    <Text style={styles.legendLabel}>{t('analytics.consumed')}</Text>
                                     <Text style={styles.legendValue}>{consumedKg} kg ({consumedPct}%)</Text>
                                 </View>
                             </View>
                             <View style={styles.legendItem}>
                                 <View style={[styles.legendDot, { backgroundColor: '#f87171' }]} />
                                 <View>
-                                    <Text style={styles.legendLabel}>Wasted</Text>
+                                    <Text style={styles.legendLabel}>{t('analytics.wasted')}</Text>
                                     <Text style={styles.legendValue}>{wastedKg} kg ({wastedPct}%)</Text>
                                 </View>
                             </View>
@@ -197,25 +204,25 @@ export default function AnalyticsScreen() {
                     <View style={styles.statCard}>
                         <View style={styles.statIconRow}>
                             <Text style={{ fontSize: 18 }}>💰</Text>
-                            <Text style={styles.statLabel}>SAVINGS</Text>
+                            <Text style={styles.statLabel}>{t('analytics.savings')}</Text>
                         </View>
                         <Text style={styles.statValue}>Rp {savingsRp.toLocaleString('id-ID')}</Text>
-                        <Text style={styles.statHint}>Estimated this month</Text>
+                        <Text style={styles.statHint}>{t('analytics.savingsHint')}</Text>
                     </View>
                     <View style={[styles.statCard, styles.statCardGreen]}>
                         <View style={styles.statIconRow}>
                             <Text style={{ fontSize: 18 }}>🌍</Text>
-                            <Text style={[styles.statLabel, { color: '#0f172a' }]}>ECO IMPACT</Text>
+                            <Text style={[styles.statLabel, { color: '#0f172a' }]}>{t('analytics.ecoImpact')}</Text>
                         </View>
                         <Text style={[styles.statValue, { color: '#0f172a' }]}>-{co2Reduced} kg</Text>
-                        <Text style={[styles.statHint, { color: '#0f172a', opacity: 0.7 }]}>CO₂ Emissions Reduced</Text>
+                        <Text style={[styles.statHint, { color: '#0f172a', opacity: 0.7 }]}>{t('analytics.co2Hint')}</Text>
                     </View>
                 </View>
 
                 {/* Top Wasted Categories */}
                 {categoryStats.length > 0 && (
                     <View style={styles.sectionBlock}>
-                        <Text style={styles.sectionTitle}>Top Wasted Categories</Text>
+                        <Text style={styles.sectionTitle}>{t('analytics.topWasted')}</Text>
                         {categoryStats.map((cat, idx) => {
                             const maxWaste = categoryStats[0]?.wastedKg || 1;
                             const barWidth = Math.max((cat.wastedKg / maxWaste) * 100, 10);
@@ -225,7 +232,7 @@ export default function AnalyticsScreen() {
                                         <IconSymbol name={cat.icon as any} size={20} color={cat.color} />
                                     </View>
                                     <View style={styles.catContent}>
-                                        <Text style={styles.catName}>{cat.name}</Text>
+                                        <Text style={styles.catName}>{t('category.' + cat.name)}</Text>
                                         <Text style={styles.catDetail}>{cat.detail}</Text>
                                     </View>
                                     <View style={styles.catRight}>
@@ -242,12 +249,12 @@ export default function AnalyticsScreen() {
 
                 {categoryStats.length === 0 && (
                     <View style={styles.sectionBlock}>
-                        <Text style={styles.sectionTitle}>Top Wasted Categories</Text>
+                        <Text style={styles.sectionTitle}>{t('analytics.topWasted')}</Text>
                         <View style={styles.emptyCard}>
                             <View style={styles.emptyIconCircle}>
                                 <IconSymbol name="checkmark.seal.fill" size={28} color="#15803d" />
                             </View>
-                            <Text style={styles.emptyText}>Awesome! No items wasted at the moment.</Text>
+                            <Text style={styles.emptyText}>{t('analytics.noWaste')}</Text>
                         </View>
                     </View>
                 )}
@@ -258,11 +265,11 @@ export default function AnalyticsScreen() {
                         <IconSymbol name="sparkles" size={24} color="#13ec6d" />
                     </View>
                     <View style={styles.tipContent}>
-                        <Text style={styles.tipTitle}>AI Smart Insights</Text>
+                        <Text style={styles.tipTitle}>{t('analytics.aiInsights')}</Text>
                         {isLoadingTip ? (
                             <ActivityIndicator size="small" color="#13ec6d" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
                         ) : (
-                            <Text style={styles.tipText}>{aiTip || "Let's reduce food waste together!"}</Text>
+                            <Text style={styles.tipText}>{aiTip || t('analytics.tipFallback')}</Text>
                         )}
                     </View>
                 </View>

@@ -1,12 +1,14 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { deleteInventoryItem, getInventoryItems } from '../src/services/localStore';
 import { RecipeSuggestion } from '../src/services/aiService';
 
 export default function RecipeDetailScreen() {
     const router = useRouter();
+    const { t } = useTranslation();
     const params = useLocalSearchParams();
 
     const [recipe, setRecipe] = useState<RecipeSuggestion | null>(null);
@@ -49,18 +51,18 @@ export default function RecipeDetailScreen() {
             .map(item => item.name);
 
         if (selectedItems.length === 0) {
-            Alert.alert("Warning", "Select ingredients from the fridge that you have used.");
+            Alert.alert(t('recipeDetail.warningTitle'), t('recipeDetail.selectUsed'));
             return;
         }
 
-        const confirmMsg = `The following ingredients will be deleted from your fridge:\n\n${selectedItems.map(n => `• ${n}`).join('\n')}\n\nContinue?`;
+        const confirmMsg = t('recipeDetail.confirmMessage', { list: selectedItems.map(n => `• ${n}`).join('\n') });
 
         const proceed = Platform.OS === 'web'
             ? window.confirm(confirmMsg)
             : await new Promise<boolean>(resolve => {
-                Alert.alert("Done Cooking?", confirmMsg, [
-                    { text: "Cancel", onPress: () => resolve(false) },
-                    { text: "Yes, Delete", onPress: () => resolve(true), style: 'destructive' }
+                Alert.alert(t('recipeDetail.confirmTitle'), confirmMsg, [
+                    { text: t('common.cancel'), onPress: () => resolve(false) },
+                    { text: t('recipeDetail.yesDelete'), onPress: () => resolve(true), style: 'destructive' }
                 ]);
             });
 
@@ -77,14 +79,14 @@ export default function RecipeDetailScreen() {
             }
 
             if (Platform.OS === 'web') {
-                alert(`✅ Done! ${selectedItems.length} ingredients have been deleted from the fridge.`);
+                alert('✅ ' + t('recipeDetail.doneMessage', { count: selectedItems.length }));
             } else {
-                Alert.alert("Done!", `${selectedItems.length} ingredients have been deleted from the fridge.`);
+                Alert.alert(t('recipeDetail.doneTitle'), t('recipeDetail.doneMessage', { count: selectedItems.length }));
             }
             router.back();
         } catch (error: any) {
             console.error("Error finishing cooking:", error);
-            Alert.alert("Error", "Failed to update fridge stock.");
+            Alert.alert(t('common.error'), t('recipeDetail.updateFailed'));
         } finally {
             setIsFinishing(false);
         }
@@ -136,9 +138,9 @@ export default function RecipeDetailScreen() {
                 {/* Fridge Ingredients */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>🧊 Ingredients from Fridge</Text>
+                        <Text style={styles.sectionTitle}>{t('recipeDetail.fridgeIngredients')}</Text>
                         <View style={styles.countBadge}>
-                            <Text style={styles.countText}>{recipe.fridgeIngredients.length} item</Text>
+                            <Text style={styles.countText}>{t('recipeDetail.itemCount', { count: recipe.fridgeIngredients.length })}</Text>
                         </View>
                     </View>
                     {recipe.fridgeIngredients.map((item, idx) => (
@@ -164,7 +166,7 @@ export default function RecipeDetailScreen() {
                 {/* Pantry Staples */}
                 {recipe.pantryStaples.length > 0 && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitleSmall}>🫙 Spices & Extras</Text>
+                        <Text style={styles.sectionTitleSmall}>{t('recipeDetail.spicesExtras')}</Text>
                         {recipe.pantryStaples.map((item, idx) => (
                             <TouchableOpacity
                                 key={idx}
@@ -187,7 +189,7 @@ export default function RecipeDetailScreen() {
 
                 {/* Instructions */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitleLarge}>📝 Cooking Instructions</Text>
+                    <Text style={styles.sectionTitleLarge}>{t('recipeDetail.instructions')}</Text>
                     <View style={styles.timeline}>
                         {recipe.instructions.map((step, idx) => (
                             <View key={idx} style={styles.timelineStep}>
@@ -221,11 +223,11 @@ export default function RecipeDetailScreen() {
                     ) : (
                         <>
                             <IconSymbol name="checkmark.circle.fill" size={22} color="#0f172a" />
-                            <Text style={styles.fabText}>Done Cooking & Update Fridge</Text>
+                            <Text style={styles.fabText}>{t('recipeDetail.doneBtn')}</Text>
                         </>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.fabHint}>Checked ingredients will be deleted from current inventory</Text>
+                <Text style={styles.fabHint}>{t('recipeDetail.fabHint')}</Text>
             </View>
         </View>
     );

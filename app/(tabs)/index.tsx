@@ -2,6 +2,7 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { InventoryItem, deleteInventoryItem, getInventoryItems, getProfile, setProfileName } from '../../src/services/localStore';
 
@@ -18,6 +19,7 @@ const calculateDaysRemaining = (expiredDate: Date) => {
 
 export default function InventoryDashboard() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,7 +69,7 @@ export default function InventoryDashboard() {
       setItems(prevItems => prevItems.filter(item => item.id !== id));
     } catch (error) {
       console.error("Error deleting item: ", error);
-      Alert.alert("Error", "Failed to delete item.");
+      Alert.alert(t('common.error'), t('fridge.deleteFailed'));
     } finally {
       setItemToDelete(null);
     }
@@ -128,24 +130,30 @@ export default function InventoryDashboard() {
   };
 
   const ItemCard = ({ item, color, sectionDaysMax }: { item: any, color: string, sectionDaysMax: number }) => {
+    // Ikon per key kategori (kategori tersimpan sebagai key, lihat normalizeCategoryKey)
+    const CATEGORY_EMOJI: Record<string, string> = {
+        sayur: '🥬',
+        buah: '🍎',
+        daging: '🥩',
+        ikan: '🐟',
+        susu: '🥛',
+        telur: '🥚',
+        bumbu: '🧂',
+        minuman: '🧃',
+        lainnya: '🛒',
+    };
     let emoji = '🛒'; // Default ikon keranjang
+    if (CATEGORY_EMOJI[item.category]) emoji = CATEGORY_EMOJI[item.category];
 
-    // Mapping ikon berdasarkan Kategori Bahasa Indonesia yang di-pass dari 'add.tsx'
-    if (item.category === 'Daging/Ayam') emoji = '🥩';
-    if (item.category === 'Buah' || item.itemName.toLowerCase().includes('buah') || item.itemName.toLowerCase().includes('apple')) emoji = '🍎';
-    if (item.category === 'Sayuran' || item.itemName.toLowerCase().includes('sayur')) emoji = '🥬';
-    if (item.category === 'Susu' || item.category === 'Susu/Olahan') emoji = '🥛';
-    if (item.category === 'Minuman' || item.itemName.toLowerCase().includes('minum')) emoji = '🧃';
-    if (item.category === 'Bumbu') emoji = '🧂';
-    if (item.category === 'Ikan/Seafood') emoji = '🐟';
-    if (item.category === 'Makanan Jadi') emoji = '🍱';
-    if (item.category === 'Telur') emoji = '🥚';
-
-    // Fallback based on item string parsing untuk deteksi kata populer
-    if (item.itemName.toLowerCase().includes('susu') || item.itemName.toLowerCase().includes('milk')) emoji = '🥛';
-    if (item.itemName.toLowerCase().includes('alpukat') || item.itemName.toLowerCase().includes('avocado')) emoji = '🥑';
-    if (item.itemName.toLowerCase().includes('ayam') || item.itemName.toLowerCase().includes('chicken')) emoji = '🍗';
-    if (item.itemName.toLowerCase().includes('telur') || item.itemName.toLowerCase().includes('egg')) emoji = '🥚';
+    // Fallback based on item string parsing untuk deteksi kata populer —
+    // hanya dipakai jika kategori belum memberi emoji spesifik (mis. 'lainnya'),
+    // agar emoji kategori (mis. bayam → 🥬) tidak tertimpa oleh kata yang mirip.
+    if (emoji === '🛒') {
+        if (item.itemName.toLowerCase().includes('susu') || item.itemName.toLowerCase().includes('milk')) emoji = '🥛';
+        if (item.itemName.toLowerCase().includes('alpukat') || item.itemName.toLowerCase().includes('avocado')) emoji = '🥑';
+        if (item.itemName.toLowerCase().includes('ayam') || item.itemName.toLowerCase().includes('chicken')) emoji = '🍗';
+        if (item.itemName.toLowerCase().includes('telur') || item.itemName.toLowerCase().includes('egg')) emoji = '🥚';
+    }
 
     return (
       <View style={styles.itemCard}>
@@ -157,7 +165,7 @@ export default function InventoryDashboard() {
             <Text style={styles.itemName}>{item.itemName}</Text>
             <View style={{ backgroundColor: `${color}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: color }}>
-                {item.days < 0 ? 'Expired' : `${item.days} day${item.days !== 1 ? 's' : ''} left`}
+                {item.days < 0 ? t('fridge.expired') : t('fridge.daysLeft', { count: item.days })}
               </Text>
             </View>
           </View>
@@ -185,7 +193,7 @@ export default function InventoryDashboard() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good Morning,</Text>
+            <Text style={styles.greeting}>{t('fridge.greeting')}</Text>
             {isEditingName ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <TextInput
@@ -203,7 +211,7 @@ export default function InventoryDashboard() {
             ) : (
               <TouchableOpacity onPress={() => { setEditedName(firstName); setIsEditingName(true); }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.title}>{firstName}&apos;s Fridge</Text>
+                  <Text style={styles.title}>{t('fridge.title', { name: firstName })}</Text>
                   <IconSymbol name="pencil" size={20} color="#94a3b8" style={{ marginLeft: 8 }} />
                 </View>
               </TouchableOpacity>
@@ -220,7 +228,7 @@ export default function InventoryDashboard() {
           <IconSymbol name="magnifyingglass" size={20} color="#a4b0be" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search food items..."
+            placeholder={t('fridge.searchPlaceholder')}
             placeholderTextColor="#a4b0be"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -228,28 +236,28 @@ export default function InventoryDashboard() {
         </View>
 
         {/* Overview Row */}
-        <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>Overview</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>{t('fridge.overview')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewScroll}>
           <View style={[styles.overviewCard, { borderColor: '#f1f5f9', borderWidth: 1 }]}>
             <View style={[styles.overviewIconBg, { backgroundColor: '#13ec6d20' }]}>
               <IconSymbol name="leaf.fill" size={20} color="#15803d" />
             </View>
             <Text style={styles.overviewValue}>{stats.fresh}</Text>
-            <Text style={styles.overviewLabel}>Fresh Items</Text>
+            <Text style={styles.overviewLabel}>{t('fridge.freshItems')}</Text>
           </View>
           <View style={[styles.overviewCard, { borderColor: '#f1f5f9', borderWidth: 1 }]}>
             <View style={[styles.overviewIconBg, { backgroundColor: '#fef3c7' }]}>
               <IconSymbol name="clock.fill" size={20} color="#ca8a04" />
             </View>
             <Text style={styles.overviewValue}>{stats.soon}</Text>
-            <Text style={styles.overviewLabel}>Use Soon</Text>
+            <Text style={styles.overviewLabel}>{t('fridge.useSoon')}</Text>
           </View>
           <View style={[styles.overviewCard, { borderColor: '#fee2e2', borderWidth: 1 }]}>
             <View style={[styles.overviewIconBg, { backgroundColor: '#fee2e2' }]}>
               <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#b91c1c" />
             </View>
             <Text style={styles.overviewValue}>{stats.expired}</Text>
-            <Text style={[styles.overviewLabel, { color: '#dc2626' }]}>Expiring!</Text>
+            <Text style={[styles.overviewLabel, { color: '#dc2626' }]}>{t('fridge.expiring')}</Text>
           </View>
         </ScrollView>
 
@@ -258,8 +266,8 @@ export default function InventoryDashboard() {
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol name="exclamationmark.circle.fill" size={18} color="#dc2626" />
-              <Text style={[styles.sectionTitle, { color: '#dc2626', flex: 1, marginLeft: 6 }]}>Expiring Soon</Text>
-              <View style={[styles.badgeCritical, { backgroundColor: '#fee2e2' }]}><Text style={[styles.badgeCriticalText, { color: '#b91c1c' }]}>Critical</Text></View>
+              <Text style={[styles.sectionTitle, { color: '#dc2626', flex: 1, marginLeft: 6 }]}>{t('fridge.expiringSoon')}</Text>
+              <View style={[styles.badgeCritical, { backgroundColor: '#fee2e2' }]}><Text style={[styles.badgeCriticalText, { color: '#b91c1c' }]}>{t('fridge.critical')}</Text></View>
             </View>
             {soonItems.map(item => <ItemCard key={item.id} item={item} color="#ef4444" sectionDaysMax={2} />)}
           </View>
@@ -269,7 +277,7 @@ export default function InventoryDashboard() {
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol name="clock.fill" size={18} color="#ca8a04" />
-              <Text style={[styles.sectionTitle, { color: '#a16207', marginLeft: 6 }]}>Use Within Week</Text>
+              <Text style={[styles.sectionTitle, { color: '#a16207', marginLeft: 6 }]}>{t('fridge.useWithinWeek')}</Text>
             </View>
             {weekItems.map(item => <ItemCard key={item.id} item={item} color="#ca8a04" sectionDaysMax={7} />)}
           </View>
@@ -279,7 +287,7 @@ export default function InventoryDashboard() {
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol name="checkmark.seal.fill" size={18} color="#13ec6d" />
-              <Text style={[styles.sectionTitle, { color: '#0f172a', marginLeft: 6 }]}>Fresh & Good</Text>
+              <Text style={[styles.sectionTitle, { color: '#0f172a', marginLeft: 6 }]}>{t('fridge.freshGood')}</Text>
             </View>
             {freshItems.map(item => <ItemCard key={item.id} item={item} color="#13ec6d" sectionDaysMax={14} />)}
           </View>
@@ -288,8 +296,8 @@ export default function InventoryDashboard() {
         {items.length === 0 && (
           <View style={styles.emptyContainer}>
             <IconSymbol name="archivebox" size={48} color="#dfe6e9" />
-            <Text style={styles.emptyText}>Fridge is empty!</Text>
-            <Text style={styles.emptySub}>Tap the + button to add items</Text>
+            <Text style={styles.emptyText}>{t('fridge.emptyTitle')}</Text>
+            <Text style={styles.emptySub}>{t('fridge.emptySub')}</Text>
           </View>
         )}
 
@@ -303,8 +311,8 @@ export default function InventoryDashboard() {
 
       <ConfirmModal
         visible={deleteModalVisible}
-        title="Delete Item"
-        message={`Are you sure you want to delete ${itemToDelete?.name} from the fridge?`}
+        title={t('fridge.deleteItemTitle')}
+        message={t('fridge.deleteItemMessage', { name: itemToDelete?.name })}
         onConfirm={confirmDelete}
         onCancel={() => {
           setDeleteModalVisible(false);
@@ -322,7 +330,7 @@ export default function InventoryDashboard() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowNotifications(false)}>
           <Pressable style={styles.notifModalContent}>
             <View style={styles.notifModalHeader}>
-              <Text style={styles.notifModalTitle}>Notifications</Text>
+              <Text style={styles.notifModalTitle}>{t('fridge.notificationsTitle')}</Text>
               <TouchableOpacity onPress={() => setShowNotifications(false)} style={{ padding: 4 }}>
                 <IconSymbol name="xmark" size={20} color="#64748b" />
               </TouchableOpacity>
@@ -331,7 +339,7 @@ export default function InventoryDashboard() {
               {soonItems.length === 0 ? (
                 <View style={{ padding: 32, alignItems: 'center' }}>
                   <IconSymbol name="bell.slash" size={32} color="#cbd5e1" />
-                  <Text style={{ color: '#64748b', marginTop: 12 }}>No alerts yet.</Text>
+                  <Text style={{ color: '#64748b', marginTop: 12 }}>{t('fridge.noAlerts')}</Text>
                 </View>
               ) : (
                 soonItems.map((item, index) => (
@@ -344,8 +352,8 @@ export default function InventoryDashboard() {
                         />
                      </View>
                      <View style={{ flex: 1 }}>
-                        <Text style={styles.notifTitle}>{item.days <= 0 ? 'Expired' : 'Expiring Soon'}</Text>
-                        <Text style={styles.notifMessage}>{item.days <= 0 ? `${item.itemName} has expired!` : `${item.itemName} will expire in ${item.days} days.`}</Text>
+                        <Text style={styles.notifTitle}>{item.days <= 0 ? t('fridge.expired') : t('fridge.expiringSoon')}</Text>
+                        <Text style={styles.notifMessage}>{item.days <= 0 ? t('fridge.expiredMessage', { name: item.itemName }) : t('fridge.expiringMessage', { name: item.itemName, count: item.days })}</Text>
                      </View>
                   </View>
                 ))

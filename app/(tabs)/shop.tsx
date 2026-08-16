@@ -1,16 +1,20 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ShopItem, deleteInventoryItem, getInventoryItems, getShoppingList, saveShoppingList } from '../../src/services/localStore';
 
 
 export default function ShopScreen() {
+    const { t, i18n } = useTranslation();
     const [newItemText, setNewItemText] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
 
     // Smart suggestions (could be dynamic later)
-    const [suggestions] = useState(['Susu UHT', 'Telur', 'Roti Tawar', 'Keju', 'Yogurt']);
+    const suggestions = i18n.language.startsWith('id')
+        ? ['Susu UHT', 'Telur', 'Roti Tawar', 'Keju', 'Yogurt']
+        : ['Milk', 'Eggs', 'White Bread', 'Cheese', 'Yogurt'];
 
     // Auto-detected from fridge (low stock / expiring)
     const [fridgeItems, setFridgeItems] = useState<ShopItem[]>([]);
@@ -37,7 +41,7 @@ export default function ShopScreen() {
                     expiring.push({
                         id: `fridge-${item.id}`,
                         text: item.itemName,
-                        subtitle: diffDays <= 0 ? 'Already expired' : `${diffDays} days left`,
+                        subtitle: diffDays <= 0 ? t('shop.alreadyExpired') : t('shop.daysLeft', { count: diffDays }),
                         amount: item.quantity || '1',
                         checked: false,
                         section: 'fridge'
@@ -49,7 +53,7 @@ export default function ShopScreen() {
         } catch (error) {
             console.error('Gagal memuat shopping list:', error);
         }
-    }, []);
+    }, [t]);
 
     useFocusEffect(
         useCallback(() => {
@@ -105,19 +109,20 @@ export default function ShopScreen() {
         const totalChecked = checkedFridgeItems.length + checkedPersonalItems.length;
 
         if (totalChecked === 0) {
-            if (Platform.OS === 'web') alert('Check the items that have been purchased first.');
-            else Alert.alert('Info', 'Check the items that have been purchased first.');
+            if (Platform.OS === 'web') alert(t('shop.purchaseFirst'));
+            else Alert.alert(t('common.info'), t('shop.purchaseFirst'));
             return;
         }
 
-        const confirmMsg = `${totalChecked} items will be marked as purchased.${checkedFridgeItems.length > 0 ? `\n\n${checkedFridgeItems.length} items from the fridge will be deleted from the inventory.` : ''}`;
+        const confirmMsg = t('shop.confirm', { count: totalChecked })
+            + (checkedFridgeItems.length > 0 ? '\n\n' + t('shop.confirmFridge', { count: checkedFridgeItems.length }) : '');
 
         const proceed = Platform.OS === 'web'
             ? window.confirm(confirmMsg)
             : await new Promise<boolean>(resolve => {
-                Alert.alert("Purchase Confirmation", confirmMsg, [
-                    { text: "Cancel", onPress: () => resolve(false) },
-                    { text: "Purchased!", onPress: () => resolve(true), style: 'default' }
+                Alert.alert(t('shop.confirmTitle'), confirmMsg, [
+                    { text: t('common.cancel'), onPress: () => resolve(false) },
+                    { text: t('shop.purchased'), onPress: () => resolve(true), style: 'default' }
                 ]);
             });
 
@@ -138,9 +143,9 @@ export default function ShopScreen() {
             // Remove checked personal items from list
             persistPersonal(personalItems.filter(i => !i.checked));
 
-            const msg = `✅ ${totalChecked} items successfully updated!`;
+            const msg = '✅ ' + t('shop.successMessage', { count: totalChecked });
             if (Platform.OS === 'web') alert(msg);
-            else Alert.alert("Success!", msg);
+            else Alert.alert(t('shop.successTitle'), msg);
         } catch (error) {
             console.error('Error marking as purchased:', error);
         } finally {
@@ -152,8 +157,8 @@ export default function ShopScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Shopping List 🛒</Text>
-                <Text style={styles.headerSubtitle}>Your smart shopping list</Text>
+                <Text style={styles.headerTitle}>{t('shop.title')}</Text>
+                <Text style={styles.headerSubtitle}>{t('shop.subtitle')}</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -163,7 +168,7 @@ export default function ShopScreen() {
                         <IconSymbol name="plus" size={20} color="#94a3b8" />
                         <TextInput
                             style={styles.input}
-                            placeholder="Add shopping item..."
+                            placeholder={t('shop.addPlaceholder')}
                             placeholderTextColor="#94a3b8"
                             value={newItemText}
                             onChangeText={setNewItemText}
@@ -175,7 +180,7 @@ export default function ShopScreen() {
                 {/* Smart Suggestions */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionLabel}>✨ QUICK SUGGESTIONS</Text>
+                        <Text style={styles.sectionLabel}>{t('shop.quickSuggestions')}</Text>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionsRow}>
                         {suggestions.map((s, idx) => (
@@ -192,9 +197,9 @@ export default function ShopScreen() {
                     <View style={styles.section}>
                         <View style={styles.sectionHeaderRow}>
                             <IconSymbol name="refrigerator" size={18} color="#13ec6d" />
-                            <Text style={styles.sectionLabel}>NEED TO REBUY</Text>
+                            <Text style={styles.sectionLabel}>{t('shop.needToRebuy')}</Text>
                         </View>
-                        <Text style={styles.sectionHint}>Low stock or near expiry</Text>
+                        <Text style={styles.sectionHint}>{t('shop.rebuyHint')}</Text>
                         {fridgeItems.map(item => (
                             <TouchableOpacity
                                 key={item.id}
@@ -221,11 +226,11 @@ export default function ShopScreen() {
                 <View style={styles.section}>
                     <View style={styles.sectionHeaderRow}>
                         <IconSymbol name="pencil" size={18} color="#64748b" />
-                        <Text style={styles.sectionLabel}>PERSONAL LIST</Text>
+                        <Text style={styles.sectionLabel}>{t('shop.personalList')}</Text>
                     </View>
                     {personalItems.length === 0 ? (
                         <View style={styles.emptyPersonal}>
-                            <Text style={styles.emptyText}>No items yet. Type in the field above to add.</Text>
+                            <Text style={styles.emptyText}>{t('shop.personalEmpty')}</Text>
                         </View>
                     ) : (
                         personalItems.map(item => (
@@ -267,11 +272,11 @@ export default function ShopScreen() {
                     ) : (
                         <>
                             <IconSymbol name="checkmark.circle.fill" size={22} color="#0f172a" />
-                            <Text style={styles.fabText}>Mark as Purchased</Text>
+                            <Text style={styles.fabText}>{t('shop.markAsPurchased')}</Text>
                         </>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.fabHint}>Checked items will be updated in the inventory</Text>
+                <Text style={styles.fabHint}>{t('shop.fabHint')}</Text>
             </View>
         </View>
     );

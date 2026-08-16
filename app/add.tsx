@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
@@ -18,6 +19,7 @@ import { CATEGORIES, CATEGORY_KEYS, getDefaultExpDate } from '../src/utils/categ
 
 export default function AddItemScreen() {
     const router = useRouter();
+    const { t } = useTranslation();
     const { width } = useWindowDimensions();
     const isLargeScreen = width > 768;
 
@@ -91,35 +93,34 @@ export default function AddItemScreen() {
         setStatusMessage(null);
 
         if (!itemName.trim()) {
-            setStatusMessage({ type: 'error', text: '⚠️ Please enter an item name.' });
-            showAlert('Error', 'Please enter an item name.');
+            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorName') });
+            showAlert(t('common.error'), t('add.errorName'));
             return;
         }
         if (!selectedCategory) {
-            setStatusMessage({ type: 'error', text: '⚠️ Please select an item category.' });
-            showAlert('Error', 'Please select an item category.');
+            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorCategory') });
+            showAlert(t('common.error'), t('add.errorCategory'));
             return;
         }
         if (!expiredDate) {
-            setStatusMessage({ type: 'error', text: '⚠️ Expiry date is not set.' });
-            showAlert('Error', 'Expiry date is not set.');
+            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorExpiry') });
+            showAlert(t('common.error'), t('add.errorExpiry'));
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const categoryLabel = CATEGORIES[selectedCategory]?.label || selectedCategory;
-
+            // Simpan key kategori (bukan label) agar tampilan bisa ikut bahasa aktif
             await addInventoryItem({
                 itemName: itemName.trim(),
-                category: categoryLabel,
+                category: selectedCategory,
                 quantity: quantity.toString(),
                 expiredDate,
             });
 
-            setStatusMessage({ type: 'success', text: '✅ ' + itemName + ' successfully added to the inventory!' });
-            showAlert('Success! ✅', `${itemName} has been added to the inventory.`);
+            setStatusMessage({ type: 'success', text: '✅ ' + t('add.successMessage', { name: itemName }) });
+            showAlert(t('add.successTitle'), t('add.successAlert', { name: itemName }));
             resetForm();
 
             if (!isLargeScreen) {
@@ -127,8 +128,8 @@ export default function AddItemScreen() {
             }
         } catch (error: any) {
             console.error('[AddItem] ❌ Error adding item:', error);
-            setStatusMessage({ type: 'error', text: '❌ Gagal menyimpan item. Coba lagi.' });
-            showAlert('Failed', 'Gagal menyimpan item. Coba lagi.');
+            setStatusMessage({ type: 'error', text: '❌ ' + t('add.failedMessage') });
+            showAlert(t('add.failedTitle'), t('add.failedMessage'));
         } finally {
             setIsLoading(false);
         }
@@ -141,11 +142,6 @@ export default function AddItemScreen() {
         setExpiredDate(null);
         setAiReason('');
         setPredictedShelfLife(null);
-    };
-
-    // Safe category label getter
-    const getCategoryLabel = (key: string) => {
-        return CATEGORIES[key]?.label || key || '';
     };
 
     return (
@@ -166,7 +162,7 @@ export default function AddItemScreen() {
                     {/* Main Elevated Card */}
                     <View style={styles.mainCard}>
                         <View style={styles.cardHeader}>
-                            <Text style={styles.cardHeaderTitle}>Add New Item</Text>
+                            <Text style={styles.cardHeaderTitle}>{t('add.title')}</Text>
                         </View>
                         
                         <View style={styles.mainCardBody}>
@@ -174,10 +170,10 @@ export default function AddItemScreen() {
                                 {/* Left Side: Form */}
                                 <View style={[styles.formSection, isLargeScreen && { flex: 1.1 }]}>
                                     <View style={styles.inputGroup}>
-                                        <Text style={styles.label}>Item Name</Text>
+                                        <Text style={styles.label}>{t('add.itemName')}</Text>
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="Example: Milk, Eggs, Chicken..."
+                                            placeholder={t('add.itemNamePlaceholder')}
                                             placeholderTextColor="#94a3b8"
                                             value={itemName}
                                             onChangeText={setItemName}
@@ -185,7 +181,7 @@ export default function AddItemScreen() {
                                     </View>
 
                                     <View style={styles.inputGroup}>
-                                        <Text style={styles.label}>Category</Text>
+                                        <Text style={styles.label}>{t('add.category')}</Text>
                                         <View style={styles.categoryGrid}>
                                             {CATEGORY_KEYS.map((key) => {
                                                 const cat = CATEGORIES[key];
@@ -198,7 +194,7 @@ export default function AddItemScreen() {
                                                     >
                                                         <Text style={styles.categoryBtnIcon}>{cat.icon}</Text>
                                                         <Text style={[styles.categoryBtnLabel, isSelected && styles.categoryBtnLabelSelected]} numberOfLines={1}>
-                                                            {cat.label}
+                                                            {t('category.' + key)}
                                                         </Text>
                                                     </Pressable>
                                                 );
@@ -208,7 +204,7 @@ export default function AddItemScreen() {
 
                                     <View style={styles.rowLayout}>
                                         <View style={[styles.inputGroup, { flex: 1.5 }]}>
-                                            <Text style={styles.label}>Expiry Date</Text>
+                                            <Text style={styles.label}>{t('add.expiryDate')}</Text>
                                             {Platform.OS === 'web' ? (
                                                 <input
                                                     type="date"
@@ -241,7 +237,7 @@ export default function AddItemScreen() {
                                             )}
                                         </View>
                                         <View style={[styles.inputGroup, { flex: 1 }]}>
-                                            <Text style={styles.label}>Quantity</Text>
+                                            <Text style={styles.label}>{t('add.quantity')}</Text>
                                             <View style={styles.stepperControl}>
                                                 <Pressable style={styles.stepBtn} onPress={() => setQuantity(String(Math.max(1, (parseInt(quantity) || 1) - 1)))}>
                                                     <Text style={styles.stepBtnText}>−</Text>
@@ -288,32 +284,32 @@ export default function AddItemScreen() {
                                 {/* Right Side: Storage Guide (AI Insight) */}
                                 <View style={[styles.guideSection, isLargeScreen && { flex: 0.9 }]}>
                                     <View style={styles.guideBanner}>
-                                        <Text style={styles.guideBannerText}>Storage Guide</Text>
+                                        <Text style={styles.guideBannerText}>{t('add.storageGuide')}</Text>
                                     </View>
                                     <View style={styles.guideContent}>
                                         {isAiPredicting ? (
                                             <View style={styles.guideLoading}>
                                                 <ActivityIndicator size="small" color="#2d9254" />
-                                                <Text style={styles.guideLoadingText}>Analyzing with AI...</Text>
+                                                <Text style={styles.guideLoadingText}>{t('add.analyzing')}</Text>
                                             </View>
                                         ) : itemName.length >= 2 ? (
                                             <View>
                                                 <Text style={styles.guideText}>
-                                                    For <Text style={{fontWeight: '700'}}>&quot;{selectedCategory ? getCategoryLabel(selectedCategory) : itemName}&quot;</Text>:
+                                                    {t('add.guideFor')} <Text style={{fontWeight: '700'}}>&quot;{selectedCategory ? t('category.' + selectedCategory) : itemName}&quot;</Text>:
                                                 </Text>
                                                 <Text style={styles.guideText}>
-                                                    {aiReason || `Store in the refrigerator to maintain freshness longer. Once opened, consume within a few days for best quality.`}
+                                                    {aiReason || t('add.guideDefault')}
                                                 </Text>
                                                 {predictedShelfLife && (
                                                     <View style={styles.shelfLifeBadge}>
                                                         <IconSymbol name="clock.arrow.circlepath" size={16} color="#065f46" />
-                                                        <Text style={styles.shelfLifeText}>Estimated: {predictedShelfLife} Days</Text>
+                                                        <Text style={styles.shelfLifeText}>{t('add.estimated', { days: predictedShelfLife })}</Text>
                                                     </View>
                                                 )}
                                             </View>
                                         ) : (
                                             <Text style={styles.guidePlaceholder}>
-                                                Enter an item name to see AI-powered storage tips and shelf life recommendations.
+                                                {t('add.guidePlaceholder')}
                                             </Text>
                                         )}
                                     </View>
@@ -344,7 +340,7 @@ export default function AddItemScreen() {
                                 {isLoading ? (
                                     <ActivityIndicator color="#fff" />
                                 ) : (
-                                    <Text style={styles.submitBtnText}>Add to Inventory</Text>
+                                    <Text style={styles.submitBtnText}>{t('add.submit')}</Text>
                                 )}
                             </Pressable>
                         </View>

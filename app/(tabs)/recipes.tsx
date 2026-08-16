@@ -1,12 +1,14 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getInventoryItems } from '../../src/services/localStore';
 import { generateRecipes, RecipeSuggestion } from '../../src/services/aiService';
 
 export default function RecipesScreen() {
     const router = useRouter();
+    const { t } = useTranslation();
     const [ingredients, setIngredients] = useState<string[]>([]);
     const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
     // Menandai bahwa user sudah pernah memilih manual, agar auto-select hanya terjadi sekali di awal
@@ -58,7 +60,7 @@ export default function RecipesScreen() {
 
     const handleGenerateRecipes = async () => {
         if (selectedIngredients.length === 0) {
-            Alert.alert("Select Ingredients", "Please select at least one ingredient to generate recipes!");
+            Alert.alert(t('recipes.alertTitle'), t('recipes.alertMessage'));
             return;
         }
 
@@ -68,7 +70,7 @@ export default function RecipesScreen() {
             const results = await generateRecipes(selectedIngredients);
             setRecipes(results);
         } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to get recipes from Gemini AI.");
+            Alert.alert(t('common.error'), error.message || t('recipes.errorMessage'));
         } finally {
             setIsLoading(false);
         }
@@ -82,13 +84,13 @@ export default function RecipesScreen() {
         <View style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.headerTop}>
-                    <Text style={styles.headerTitle}>AI Recipe Maker 👨‍🍳</Text>
+                    <Text style={styles.headerTitle}>{t('recipes.title')}</Text>
                     <IconSymbol name="sparkles" size={24} color="#8e44ad" />
                 </View>
                 <Text style={styles.headerSubtitle}>
                     {ingredients.length > 0
-                        ? `Select the ingredients you want to use from ${ingredients.length} items in the fridge.`
-                        : "Your fridge is empty. Add ingredients first!"}
+                        ? t('recipes.subtitleCount', { count: ingredients.length })
+                        : t('recipes.subtitleEmpty')}
                 </Text>
             </View>
 
@@ -97,14 +99,14 @@ export default function RecipesScreen() {
                 {ingredients.length > 0 && (
                     <View style={styles.selectionSection}>
                         <View style={styles.selectionHeader}>
-                            <Text style={styles.selectionTitle}>Select Cooking Ingredients</Text>
+                            <Text style={styles.selectionTitle}>{t('recipes.selectTitle')}</Text>
                             <View style={styles.selectionActions}>
                                 <TouchableOpacity onPress={handleSelectAll}>
-                                    <Text style={styles.actionText}>Select All</Text>
+                                    <Text style={styles.actionText}>{t('recipes.selectAll')}</Text>
                                 </TouchableOpacity>
                                 <View style={styles.divider} />
                                 <TouchableOpacity onPress={handleClearAll}>
-                                    <Text style={styles.actionText}>Clear</Text>
+                                    <Text style={styles.actionText}>{t('recipes.clear')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -142,7 +144,7 @@ export default function RecipesScreen() {
                         <>
                             <IconSymbol name="book.fill" size={20} color="#fff" />
                             <Text style={styles.generateBtnText}>
-                                Generate Recipes ({selectedIngredients.length} Ingredients)
+                                {t('recipes.generate', { count: selectedIngredients.length })}
                             </Text>
                         </>
                     )}
@@ -166,7 +168,7 @@ export default function RecipesScreen() {
                                         <Text style={styles.metaText}>{recipe.prepTime}</Text>
                                     </View>
                                     <View style={[styles.metaBadge, { backgroundColor: '#fef3c7' }]}>
-                                        <Text style={[styles.metaText, { color: '#92400e' }]}>difficulty: {recipe.difficulty}</Text>
+                                        <Text style={[styles.metaText, { color: '#92400e' }]}>{t('recipes.difficulty', { difficulty: recipe.difficulty })}</Text>
                                     </View>
                                     <View style={styles.metaBadge}>
                                         <Text style={styles.metaText}>🔥 {recipe.calories}</Text>
@@ -174,7 +176,7 @@ export default function RecipesScreen() {
                                 </View>
                             </View>
                             <View style={styles.viewRecipeBtn}>
-                                <Text style={styles.viewRecipeText}>Open Recipe Details</Text>
+                                <Text style={styles.viewRecipeText}>{t('recipes.openDetails')}</Text>
                                 <IconSymbol name="chevron.right" size={16} color="#8e44ad" />
                             </View>
                         </TouchableOpacity>
@@ -186,7 +188,7 @@ export default function RecipesScreen() {
                         <View style={styles.emptyIconCircle}>
                             <IconSymbol name="refrigerator" size={40} color="#cbd5e1" />
                         </View>
-                        <Text style={styles.emptyText}>Select ingredients above then press the purple button to start mixing the best recipes!</Text>
+                        <Text style={styles.emptyText}>{t('recipes.empty')}</Text>
                     </View>
                 )}
             </ScrollView>

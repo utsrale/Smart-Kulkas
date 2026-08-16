@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { IconSymbol } from './icon-symbol';
 
@@ -19,10 +20,11 @@ export function ConfirmModal({
     message,
     onConfirm,
     onCancel,
-    confirmText = 'Delete',
-    cancelText = 'Cancel',
+    confirmText,
+    cancelText,
     type = 'danger'
 }: ConfirmModalProps) {
+    const { t } = useTranslation();
     return (
         <Modal
             transparent
@@ -45,13 +47,13 @@ export function ConfirmModal({
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-                            <Text style={styles.cancelBtnText}>{cancelText}</Text>
+                            <Text style={styles.cancelBtnText}>{cancelText || t('common.cancel')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.confirmBtn, { backgroundColor: type === 'danger' ? '#ef4444' : '#13ec6d' }]}
                             onPress={onConfirm}
                         >
-                            <Text style={styles.confirmBtnText}>{confirmText}</Text>
+                            <Text style={styles.confirmBtnText}>{confirmText || t('common.delete')}</Text>
                         </TouchableOpacity>
                     </View>
                 </Pressable>

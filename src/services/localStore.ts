@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { normalizeCategoryKey } from '../utils/categoryDefaults';
 
 // ============================================================
 // Penyimpanan lokal (tanpa login, tanpa Firebase).
@@ -41,21 +42,11 @@ export interface Profile {
     name: string;
 }
 
-export interface BackupData {
-    version: number;
-    exportedAt: string;
-    inventory: StoredInventoryItem[];
-    shopping: ShopItem[];
-    profile: Profile;
-}
-
 const KEYS = {
     inventory: '@smartkulkas/inventory/v1',
     shopping: '@smartkulkas/shopping/v1',
     profile: '@smartkulkas/profile/v1',
 };
-
-const BACKUP_VERSION = 1;
 
 const generateId = () =>
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -82,6 +73,7 @@ async function writeJSON(key: string, value: unknown): Promise<void> {
 
 const hydrateItem = (stored: StoredInventoryItem): InventoryItem => ({
     ...stored,
+    category: normalizeCategoryKey(stored.category),
     addedDate: new Date(stored.addedDate),
     expiredDate: new Date(stored.expiredDate),
 });
@@ -89,7 +81,7 @@ const hydrateItem = (stored: StoredInventoryItem): InventoryItem => ({
 const serializeItem = (item: InventoryItem): StoredInventoryItem => ({
     id: item.id,
     itemName: item.itemName,
-    category: item.category,
+    category: normalizeCategoryKey(item.category),
     quantity: item.quantity,
     addedDate: item.addedDate.toISOString(),
     expiredDate: item.expiredDate.toISOString(),
@@ -100,8 +92,22 @@ const serializeItem = (item: InventoryItem): StoredInventoryItem => ({
 
 export async function getInventoryItems(): Promise<InventoryItem[]> {
     const items = await readJSON<StoredInventoryItem[]>(KEYS.inventory, []);
-    return items
-        .filter((it) => it && it.id && it.expiredDate)
+    const valid = items.filter((it) => it && it.id && it.expiredDate);
+
+    // Migrasi data lama: kategori yang tersimpan sebagai label (Inggris/Indonesia)
+    // dinormalisasi menjadi key. Jika ada yang berubah, tulis kembali ke storage
+    // sekali saja agar data lama ikut ter-upgrade.
+    let migrated = false;
+    const normalized = valid.map((it) => {
+        const key = normalizeCategoryKey(it.category);
+        if (key !== it.category) migrated = true;
+        return key === it.category ? it : { ...it, category: key };
+    });
+    if (migrated) {
+        await writeJSON(KEYS.inventory, normalized);
+    }
+
+    return normalized
         .map(hydrateItem)
         .sort((a, b) => a.expiredDate.getTime() - b.expiredDate.getTime());
 }
@@ -171,40 +177,7 @@ export async function setProfileName(name: string): Promise<void> {
     await writeJSON(KEYS.profile, { name });
 }
 
-// ---------------- Backup (export/import/clear) ----------------
-
-export async function exportAllData(): Promise<string> {
-    const [inventory, shopping, profile] = await Promise.all([
-        readJSON<StoredInventoryItem[]>(KEYS.inventory, []),
-        readJSON<ShopItem[]>(KEYS.shopping, []),
-        readJSON<Profile>(KEYS.profile, { name: '' }),
-    ]);
-
-    const backup: BackupData = {
-        version: BACKUP_VERSION,
-        exportedAt: new Date().toISOString(),
-        inventory,
-        shopping,
-        profile,
-    };
-    return JSON.stringify(backup, null, 2);
-}
-
-export async function importAllData(json: string): Promise<void> {
-    const parsed = JSON.parse(json) as Partial<BackupData>;
-    if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Format file backup tidak valid.');
-    }
-    if (parsed.inventory && Array.isArray(parsed.inventory)) {
-        await writeJSON(KEYS.inventory, parsed.inventory);
-    }
-    if (parsed.shopping && Array.isArray(parsed.shopping)) {
-        await writeJSON(KEYS.shopping, parsed.shopping);
-    }
-    if (parsed.profile && typeof parsed.profile === 'object') {
-        await writeJSON(KEYS.profile, parsed.profile);
-    }
-}
+// ---------------- Clear all data ----------------
 
 export async function clearAllData(): Promise<void> {
     await AsyncStorage.multiRemove([KEYS.inventory, KEYS.shopping, KEYS.profile]);

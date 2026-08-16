@@ -1,3 +1,4 @@
+import i18n from '@/src/i18n';
 import { Platform } from 'react-native';
 
 // expo-notifications diimport secara lazy (dinamis): module tersebut punya
@@ -47,18 +48,18 @@ export async function scheduleExpiryNotification(itemName: string, daysLeft: num
 
     let bodyText = ``;
     if (daysLeft <= 0) {
-        bodyText = `Peringatan: ${itemName} Anda sudah kedaluwarsa!`;
+        bodyText = i18n.t('notifications.expiredBody', { name: itemName });
     } else if (daysLeft <= 2) {
-        bodyText = `${itemName} Anda akan kedaluwarsa dalam ${daysLeft} hari. Segera Konsumsi!`;
+        bodyText = i18n.t('notifications.expiringBody', { name: itemName, count: daysLeft });
     } else {
-        bodyText = `Jangan lupa bahan ${itemName} ini masih segar untuk diolah!`;
+        bodyText = i18n.t('notifications.freshBody', { name: itemName });
     }
 
     const Notifications = await getNotifications();
 
     await Notifications.scheduleNotificationAsync({
         content: {
-            title: "Smart Kulkas Reminder 🥦",
+            title: i18n.t('notifications.title'),
             body: bodyText,
             sound: true,
         },

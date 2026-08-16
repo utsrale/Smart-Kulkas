@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function TabLayout() {
+  const { t } = useTranslation();
 
   const tabBarHeight = Platform.OS === 'ios' ? 85 : Platform.OS === 'web' ? 82 : 65;
   const tabBarPaddingBottom = Platform.OS === 'ios' ? 25 : Platform.OS === 'web' ? 16 : 10;
@@ -37,35 +39,35 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Fridge',
+            title: t('tabs.fridge'),
             tabBarIcon: ({ color }) => <IconSymbol size={28} name="refrigerator" color={color} />,
           }}
         />
         <Tabs.Screen
           name="recipes"
           options={{
-            title: 'Recipes',
+            title: t('tabs.recipes'),
             tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
           }}
         />
         <Tabs.Screen
           name="shop"
           options={{
-            title: 'Shop',
+            title: t('tabs.shop'),
             tabBarIcon: ({ color }) => <IconSymbol size={28} name="cart.fill" color={color} />,
           }}
         />
         <Tabs.Screen
           name="analytics"
           options={{
-            title: 'Analytics',
+            title: t('tabs.analytics'),
             tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
-            title: 'Settings',
+            title: t('tabs.settings'),
             tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
           }}
         />
