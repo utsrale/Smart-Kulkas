@@ -42,7 +42,15 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
+        // Absolute + semua sisi 0 agar menutupi seluruh layar di semua platform
+        // (di web, flex:1 saja tidak mengisi tinggi karena parent root ber-orientasi row)
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1000,
+        elevation: 1000,
         backgroundColor: '#f6f8f7',
         justifyContent: 'center',
         alignItems: 'center',
