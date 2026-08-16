@@ -1,9 +1,10 @@
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { showToast } from '@/components/ui/toast';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { InventoryItem, deleteInventoryItem, getInventoryItems, getProfile, setProfileName } from '../../src/services/localStore';
 
 const calculateDaysRemaining = (expiredDate: Date) => {
@@ -69,7 +70,7 @@ export default function InventoryDashboard() {
       setItems(prevItems => prevItems.filter(item => item.id !== id));
     } catch (error) {
       console.error("Error deleting item: ", error);
-      Alert.alert(t('common.error'), t('fridge.deleteFailed'));
+      showToast('error', t('fridge.deleteFailed'));
     } finally {
       setItemToDelete(null);
     }

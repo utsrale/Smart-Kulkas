@@ -46,6 +46,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'cart.fill': 'shopping-cart',
   'gearshape.fill': 'settings',
   'sparkles': 'auto-awesome',
+  'magnifyingglass': 'search',
   'lightbulb.fill': 'lightbulb',
   'barcode.viewfinder': 'qr-code-scanner',
   'doc.text.viewfinder': 'document-scanner',

@@ -7,6 +7,7 @@ import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
 
 import SplashScreen from '@/components/splash-screen';
+import { AppToast } from '@/components/ui/toast';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/src/contexts/AuthContext';
 import { initI18n } from '@/src/i18n';
@@ -61,6 +62,8 @@ export default function RootLayout() {
       <RootLayoutNav />
       {/* Halaman awal: overlay di atas stack, hilang otomatis 2 detik / saat di-tap */}
       {!splashDone && <SplashScreen onFinish={finishSplash} />}
+      {/* Notifikasi in-app (toast) — di-render paling atas agar selalu terlihat */}
+      <AppToast />
     </AuthProvider>
   );
 }

@@ -1,8 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { showToast } from '@/components/ui/toast';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { deleteInventoryItem, getInventoryItems } from '../src/services/localStore';
 import { RecipeSuggestion } from '../src/services/aiService';
 
@@ -15,6 +17,8 @@ export default function RecipeDetailScreen() {
     const [checkedFridge, setCheckedFridge] = useState<Set<number>>(new Set());
     const [checkedPantry, setCheckedPantry] = useState<Set<number>>(new Set());
     const [isFinishing, setIsFinishing] = useState(false);
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmMessage, setConfirmMessage] = useState('');
 
     useEffect(() => {
         try {
@@ -43,7 +47,7 @@ export default function RecipeDetailScreen() {
         });
     };
 
-    const handleFinishCooking = async () => {
+    const handleFinishCooking = () => {
         if (!recipe) return;
 
         const selectedItems = recipe.fridgeIngredients
@@ -51,22 +55,21 @@ export default function RecipeDetailScreen() {
             .map(item => item.name);
 
         if (selectedItems.length === 0) {
-            Alert.alert(t('recipeDetail.warningTitle'), t('recipeDetail.selectUsed'));
+            showToast('error', t('recipeDetail.selectUsed'));
             return;
         }
 
-        const confirmMsg = t('recipeDetail.confirmMessage', { list: selectedItems.map(n => `• ${n}`).join('\n') });
+        setConfirmMessage(t('recipeDetail.confirmMessage', { list: selectedItems.map(n => `• ${n}`).join('\n') }));
+        setConfirmVisible(true);
+    };
 
-        const proceed = Platform.OS === 'web'
-            ? window.confirm(confirmMsg)
-            : await new Promise<boolean>(resolve => {
-                Alert.alert(t('recipeDetail.confirmTitle'), confirmMsg, [
-                    { text: t('common.cancel'), onPress: () => resolve(false) },
-                    { text: t('recipeDetail.yesDelete'), onPress: () => resolve(true), style: 'destructive' }
-                ]);
-            });
+    const confirmFinishCooking = async () => {
+        setConfirmVisible(false);
+        if (!recipe) return;
 
-        if (!proceed) return;
+        const selectedItems = recipe.fridgeIngredients
+            .filter((_, idx) => checkedFridge.has(idx))
+            .map(item => item.name);
 
         setIsFinishing(true);
         try {
@@ -78,15 +81,11 @@ export default function RecipeDetailScreen() {
                 }
             }
 
-            if (Platform.OS === 'web') {
-                alert('✅ ' + t('recipeDetail.doneMessage', { count: selectedItems.length }));
-            } else {
-                Alert.alert(t('recipeDetail.doneTitle'), t('recipeDetail.doneMessage', { count: selectedItems.length }));
-            }
+            showToast('success', t('recipeDetail.doneMessage', { count: selectedItems.length }));
             router.back();
         } catch (error: any) {
             console.error("Error finishing cooking:", error);
-            Alert.alert(t('common.error'), t('recipeDetail.updateFailed'));
+            showToast('error', t('recipeDetail.updateFailed'));
         } finally {
             setIsFinishing(false);
         }
@@ -229,6 +228,17 @@ export default function RecipeDetailScreen() {
                 </TouchableOpacity>
                 <Text style={styles.fabHint}>{t('recipeDetail.fabHint')}</Text>
             </View>
+
+            {/* Konfirmasi selesai masak */}
+            <ConfirmModal
+                visible={confirmVisible}
+                title={t('recipeDetail.confirmTitle')}
+                message={confirmMessage}
+                confirmText={t('recipeDetail.yesDelete')}
+                type="danger"
+                onConfirm={confirmFinishCooking}
+                onCancel={() => setConfirmVisible(false)}
+            />
         </View>
     );
 }

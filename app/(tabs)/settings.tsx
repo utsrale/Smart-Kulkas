@@ -1,9 +1,11 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { showToast } from '@/components/ui/toast';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Alert, Platform, ScrollView,
+    ScrollView,
     StyleSheet,
     Text, TouchableOpacity,
     View,
@@ -15,6 +17,7 @@ export default function ProfileScreen() {
     const { t, i18n } = useTranslation();
     const [stats, setStats] = useState({ active: 0, used: 0, expired: 0 });
     const [profileName, setProfileName] = useState('User');
+    const [confirmVisible, setConfirmVisible] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -48,25 +51,19 @@ export default function ProfileScreen() {
         }, [loadData])
     );
 
-    const handleClearAll = async () => {
-        const proceed = Platform.OS === 'web'
-            ? window.confirm(t('settings.clearConfirmWeb'))
-            : await new Promise<boolean>(resolve => {
-                Alert.alert(t('settings.clearConfirmTitle'), t('settings.clearConfirmMessage'), [
-                    { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-                    { text: t('common.delete'), style: 'destructive', onPress: () => resolve(true) },
-                ]);
-            });
+    const handleClearAll = () => {
+        setConfirmVisible(true);
+    };
 
-        if (!proceed) return;
-
+    const confirmClearAll = async () => {
+        setConfirmVisible(false);
         try {
             await clearAllData();
             loadData();
-            Alert.alert(t('settings.clearDone'));
+            showToast('success', t('settings.clearDone'));
         } catch (error) {
             console.error('Gagal menghapus data:', error);
-            Alert.alert(t('common.error'), t('settings.clearFailed'));
+            showToast('error', t('settings.clearFailed'));
         }
     };
 
@@ -127,6 +124,17 @@ export default function ProfileScreen() {
             <Text style={styles.localHint}>
                 {t('settings.localHint')}
             </Text>
+
+            {/* Konfirmasi hapus semua data */}
+            <ConfirmModal
+                visible={confirmVisible}
+                title={t('settings.clearConfirmTitle')}
+                message={t('settings.clearConfirmMessage')}
+                confirmText={t('settings.clearAll')}
+                type="danger"
+                onConfirm={confirmClearAll}
+                onCancel={() => setConfirmVisible(false)}
+            />
         </ScrollView>
     );
 }

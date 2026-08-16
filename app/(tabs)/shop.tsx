@@ -1,8 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { showToast } from '@/components/ui/toast';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ShopItem, deleteInventoryItem, getInventoryItems, getShoppingList, saveShoppingList } from '../../src/services/localStore';
 
 
@@ -10,6 +12,8 @@ export default function ShopScreen() {
     const { t, i18n } = useTranslation();
     const [newItemText, setNewItemText] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmMessage, setConfirmMessage] = useState('');
 
     // Smart suggestions (could be dynamic later)
     const suggestions = i18n.language.startsWith('id')
@@ -103,30 +107,29 @@ export default function ShopScreen() {
         persistPersonal(personalItems.filter(item => item.id !== id));
     };
 
-    const handleMarkAsPurchased = async () => {
+    const handleMarkAsPurchased = () => {
         const checkedFridgeItems = fridgeItems.filter(i => i.checked);
         const checkedPersonalItems = personalItems.filter(i => i.checked);
         const totalChecked = checkedFridgeItems.length + checkedPersonalItems.length;
 
         if (totalChecked === 0) {
-            if (Platform.OS === 'web') alert(t('shop.purchaseFirst'));
-            else Alert.alert(t('common.info'), t('shop.purchaseFirst'));
+            showToast('info', t('shop.purchaseFirst'));
             return;
         }
 
         const confirmMsg = t('shop.confirm', { count: totalChecked })
             + (checkedFridgeItems.length > 0 ? '\n\n' + t('shop.confirmFridge', { count: checkedFridgeItems.length }) : '');
 
-        const proceed = Platform.OS === 'web'
-            ? window.confirm(confirmMsg)
-            : await new Promise<boolean>(resolve => {
-                Alert.alert(t('shop.confirmTitle'), confirmMsg, [
-                    { text: t('common.cancel'), onPress: () => resolve(false) },
-                    { text: t('shop.purchased'), onPress: () => resolve(true), style: 'default' }
-                ]);
-            });
+        setConfirmMessage(confirmMsg);
+        setConfirmVisible(true);
+    };
 
-        if (!proceed) return;
+    const confirmPurchase = async () => {
+        setConfirmVisible(false);
+
+        const checkedFridgeItems = fridgeItems.filter(i => i.checked);
+        const checkedPersonalItems = personalItems.filter(i => i.checked);
+        const totalChecked = checkedFridgeItems.length + checkedPersonalItems.length;
 
         setIsProcessing(true);
         try {
@@ -143,9 +146,7 @@ export default function ShopScreen() {
             // Remove checked personal items from list
             persistPersonal(personalItems.filter(i => !i.checked));
 
-            const msg = '✅ ' + t('shop.successMessage', { count: totalChecked });
-            if (Platform.OS === 'web') alert(msg);
-            else Alert.alert(t('shop.successTitle'), msg);
+            showToast('success', t('shop.successMessage', { count: totalChecked }).replace(/^✅\s*/, ''));
         } catch (error) {
             console.error('Error marking as purchased:', error);
         } finally {
@@ -278,6 +279,17 @@ export default function ShopScreen() {
                 </TouchableOpacity>
                 <Text style={styles.fabHint}>{t('shop.fabHint')}</Text>
             </View>
+
+            {/* Konfirmasi pembelian */}
+            <ConfirmModal
+                visible={confirmVisible}
+                title={t('shop.confirmTitle')}
+                message={confirmMessage}
+                confirmText={t('shop.confirmBuy')}
+                type="info"
+                onConfirm={confirmPurchase}
+                onCancel={() => setConfirmVisible(false)}
+            />
         </View>
     );
 }

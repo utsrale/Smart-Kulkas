@@ -1,10 +1,10 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { showToast } from '@/components/ui/toast';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     Pressable,
     ScrollView,
@@ -31,16 +31,6 @@ export default function AddItemScreen() {
     const [isAiPredicting, setIsAiPredicting] = useState(false);
     const [aiReason, setAiReason] = useState('');
     const [predictedShelfLife, setPredictedShelfLife] = useState<number | null>(null);
-    const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-    // Cross-platform alert that works on mobile web
-    const showAlert = (title: string, message: string) => {
-        if (Platform.OS === 'web') {
-            window.alert(`${title}\n${message}`);
-        } else {
-            Alert.alert(title, message);
-        }
-    };
 
     const handleCategorySelect = (key: string) => {
         setSelectedCategory(key);
@@ -90,21 +80,16 @@ export default function AddItemScreen() {
     }, [itemName]);
 
     const handleSubmit = async () => {
-        setStatusMessage(null);
-
         if (!itemName.trim()) {
-            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorName') });
-            showAlert(t('common.error'), t('add.errorName'));
+            showToast('error', t('add.errorName'));
             return;
         }
         if (!selectedCategory) {
-            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorCategory') });
-            showAlert(t('common.error'), t('add.errorCategory'));
+            showToast('error', t('add.errorCategory'));
             return;
         }
         if (!expiredDate) {
-            setStatusMessage({ type: 'error', text: '⚠️ ' + t('add.errorExpiry') });
-            showAlert(t('common.error'), t('add.errorExpiry'));
+            showToast('error', t('add.errorExpiry'));
             return;
         }
 
@@ -119,8 +104,7 @@ export default function AddItemScreen() {
                 expiredDate,
             });
 
-            setStatusMessage({ type: 'success', text: '✅ ' + t('add.successMessage', { name: itemName }) });
-            showAlert(t('add.successTitle'), t('add.successAlert', { name: itemName }));
+            showToast('success', t('add.successMessage', { name: itemName }));
             resetForm();
 
             if (!isLargeScreen) {
@@ -128,8 +112,7 @@ export default function AddItemScreen() {
             }
         } catch (error: any) {
             console.error('[AddItem] ❌ Error adding item:', error);
-            setStatusMessage({ type: 'error', text: '❌ ' + t('add.failedMessage') });
-            showAlert(t('add.failedTitle'), t('add.failedMessage'));
+            showToast('error', t('add.failedMessage'));
         } finally {
             setIsLoading(false);
         }
@@ -316,21 +299,6 @@ export default function AddItemScreen() {
                                 </View>
                             </View>
 
-                            {/* Status Message Banner */}
-                            {statusMessage && (
-                                <View style={[
-                                    styles.statusBanner, 
-                                    statusMessage.type === 'success' ? styles.statusSuccess : styles.statusError
-                                ]}>
-                                    <Text style={[
-                                        styles.statusText, 
-                                        statusMessage.type === 'success' ? styles.statusTextSuccess : styles.statusTextError
-                                    ]}>
-                                        {statusMessage.text}
-                                    </Text>
-                                </View>
-                            )}
-
                             {/* Footer Submit Button */}
                             <Pressable 
                                 style={[styles.submitBtn, isLoading && { opacity: 0.8 }]} 
@@ -401,10 +369,4 @@ const styles = StyleSheet.create({
     submitBtn: { backgroundColor: '#2d9254', height: 56, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 16, boxShadow: '0 4px 10px rgba(45, 146, 84, 0.3)', elevation: 4, cursor: 'pointer' as any },
     submitBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
-    statusBanner: { padding: 14, borderRadius: 10, marginTop: 16 },
-    statusSuccess: { backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
-    statusError: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5' },
-    statusText: { fontSize: 14, fontWeight: '600', textAlign: 'center' },
-    statusTextSuccess: { color: '#166534' },
-    statusTextError: { color: '#991b1b' },
 });

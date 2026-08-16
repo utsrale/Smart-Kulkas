@@ -1,34 +1,43 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { IngredientPicker, PickerItem } from '@/components/ui/ingredient-picker';
+import { showToast } from '@/components/ui/toast';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getInventoryItems } from '../../src/services/localStore';
 import { generateRecipes, RecipeSuggestion } from '../../src/services/aiService';
 
 export default function RecipesScreen() {
     const router = useRouter();
     const { t } = useTranslation();
-    const [ingredients, setIngredients] = useState<string[]>([]);
+    const [ingredientItems, setIngredientItems] = useState<PickerItem[]>([]);
     const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
-    // Menandai bahwa user sudah pernah memilih manual, agar auto-select hanya terjadi sekali di awal
-    const hasSelectedRef = useRef(false);
+    const [pickerVisible, setPickerVisible] = useState(false);
     const [recipes, setRecipes] = useState<RecipeSuggestion[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     const loadIngredients = useCallback(async () => {
         try {
             const inventory = await getInventoryItems();
-            const items = inventory
-                .filter(item => item.status === 'active')
-                .map(item => item.itemName);
+            const now = new Date();
 
-            const uniqueItems = Array.from(new Set(items)).sort();
-            setIngredients(uniqueItems);
-            // By default, select all if none were selected before
-            if (!hasSelectedRef.current && uniqueItems.length > 0) {
-                setSelectedIngredients(uniqueItems);
-            }
+            // Ambil bahan aktif, unik per nama (pertahankan item pertama)
+            const unique = new Map<string, PickerItem>();
+            inventory
+                .filter(item => item.status === 'active')
+                .forEach(item => {
+                    if (unique.has(item.itemName)) return;
+                    const diffMs = item.expiredDate.getTime() - now.getTime();
+                    unique.set(item.itemName, {
+                        name: item.itemName,
+                        category: item.category,
+                        daysLeft: Math.ceil(diffMs / (1000 * 60 * 60 * 24)),
+                    });
+                });
+
+            const items = Array.from(unique.values());
+            setIngredientItems(items);
         } catch (error) {
             console.error('Gagal memuat bahan:', error);
         }
@@ -41,26 +50,26 @@ export default function RecipesScreen() {
     );
 
     const toggleIngredient = (name: string) => {
-        hasSelectedRef.current = true;
-        if (selectedIngredients.includes(name)) {
-            setSelectedIngredients(selectedIngredients.filter(i => i !== name));
-        } else {
-            setSelectedIngredients([...selectedIngredients, name]);
-        }
+        setSelectedIngredients(prev =>
+            prev.includes(name)
+                ? prev.filter(i => i !== name)
+                : [...prev, name]
+        );
     };
 
     const handleSelectAll = () => {
-        hasSelectedRef.current = true;
-        setSelectedIngredients([...ingredients]);
+        setSelectedIngredients(ingredientItems.map(it => it.name));
     };
+
     const handleClearAll = () => {
-        hasSelectedRef.current = true;
         setSelectedIngredients([]);
     };
 
     const handleGenerateRecipes = async () => {
+        setPickerVisible(false);
+
         if (selectedIngredients.length === 0) {
-            Alert.alert(t('recipes.alertTitle'), t('recipes.alertMessage'));
+            showToast('error', t('recipes.alertMessage'));
             return;
         }
 
@@ -70,7 +79,7 @@ export default function RecipesScreen() {
             const results = await generateRecipes(selectedIngredients);
             setRecipes(results);
         } catch (error: any) {
-            Alert.alert(t('common.error'), error.message || t('recipes.errorMessage'));
+            showToast('error', error.message || t('recipes.errorMessage'));
         } finally {
             setIsLoading(false);
         }
@@ -80,6 +89,15 @@ export default function RecipesScreen() {
         router.push({ pathname: '/recipe-detail', params: { recipe: JSON.stringify(recipe) } });
     };
 
+    // Subtitle kartu masuk: netral bila belum ada pilihan / semua terpilih,
+    // tampilkan jumlah terpilih hanya saat sebagian (1..total-1)
+    const noneOrAll = selectedIngredients.length === 0 || selectedIngredients.length === ingredientItems.length;
+    const entrySubtitle = ingredientItems.length === 0
+        ? t('recipes.subtitleEmpty')
+        : noneOrAll
+            ? t('recipes.pickerEntrySubtitle', { count: ingredientItems.length })
+            : t('recipes.selectedCount', { count: selectedIngredients.length, total: ingredientItems.length });
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -88,67 +106,44 @@ export default function RecipesScreen() {
                     <IconSymbol name="sparkles" size={24} color="#8e44ad" />
                 </View>
                 <Text style={styles.headerSubtitle}>
-                    {ingredients.length > 0
-                        ? t('recipes.subtitleCount', { count: ingredients.length })
+                    {ingredientItems.length > 0
+                        ? t('recipes.subtitleCount', { count: ingredientItems.length })
                         : t('recipes.subtitleEmpty')}
                 </Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Ingredient Selection Section */}
-                {ingredients.length > 0 && (
-                    <View style={styles.selectionSection}>
-                        <View style={styles.selectionHeader}>
-                            <Text style={styles.selectionTitle}>{t('recipes.selectTitle')}</Text>
-                            <View style={styles.selectionActions}>
-                                <TouchableOpacity onPress={handleSelectAll}>
-                                    <Text style={styles.actionText}>{t('recipes.selectAll')}</Text>
-                                </TouchableOpacity>
-                                <View style={styles.divider} />
-                                <TouchableOpacity onPress={handleClearAll}>
-                                    <Text style={styles.actionText}>{t('recipes.clear')}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                        
-                        <View style={styles.chipContainer}>
-                            {ingredients.map((ing) => {
-                                const isSelected = selectedIngredients.includes(ing);
-                                return (
-                                    <TouchableOpacity
-                                        key={ing}
-                                        style={[styles.chip, isSelected && styles.chipSelected]}
-                                        onPress={() => toggleIngredient(ing)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                                            {isSelected && <IconSymbol name="checkmark.circle.fill" size={14} color="#fff" />}
-                                        </View>
-                                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{ing}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
+                {/* Satu-satunya pintu: pilih bahan (membuka sheet) */}
+                {isLoading ? (
+                    <View style={styles.loadingCard}>
+                        <ActivityIndicator size="large" color="#8e44ad" />
+                        <Text style={styles.loadingText}>{t('recipes.generating')}</Text>
                     </View>
+                ) : ingredientItems.length > 0 && (
+                    <TouchableOpacity
+                        style={styles.entryCard}
+                        onPress={() => setPickerVisible(true)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.entryIcon}>
+                            <IconSymbol name="refrigerator" size={22} color="#8e44ad" />
+                        </View>
+                        <View style={styles.entryTextWrap}>
+                            <Text style={styles.entryTitle}>{t('recipes.chooseIngredients')}</Text>
+                            <Text style={styles.entrySubtitle}>{entrySubtitle}</Text>
+                        </View>
+                        <IconSymbol name="chevron.right" size={20} color="#94a3b8" />
+                    </TouchableOpacity>
                 )}
 
-                {/* Generate Button */}
-                <TouchableOpacity
-                    style={[styles.generateBtn, (isLoading || selectedIngredients.length === 0) && { opacity: 0.6 }]}
-                    onPress={handleGenerateRecipes}
-                    disabled={isLoading || selectedIngredients.length === 0}
-                >
-                    {isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <>
-                            <IconSymbol name="book.fill" size={20} color="#fff" />
-                            <Text style={styles.generateBtnText}>
-                                {t('recipes.generate', { count: selectedIngredients.length })}
-                            </Text>
-                        </>
-                    )}
-                </TouchableOpacity>
+                {ingredientItems.length === 0 && (
+                    <View style={styles.emptyIngredients}>
+                        <View style={styles.emptyIconCircle}>
+                            <IconSymbol name="refrigerator" size={40} color="#cbd5e1" />
+                        </View>
+                        <Text style={styles.emptyText}>{t('recipes.subtitleEmpty')}</Text>
+                    </View>
+                )}
 
                 {/* Recipes List */}
                 <View style={styles.recipeList}>
@@ -184,14 +179,23 @@ export default function RecipesScreen() {
                 </View>
 
                 {recipes.length === 0 && !isLoading && (
-                    <View style={styles.emptyState}>
-                        <View style={styles.emptyIconCircle}>
-                            <IconSymbol name="refrigerator" size={40} color="#cbd5e1" />
-                        </View>
-                        <Text style={styles.emptyText}>{t('recipes.empty')}</Text>
-                    </View>
+                    <Text style={styles.hintText}>
+                        {ingredientItems.length > 0 ? t('recipes.empty') : t('recipes.subtitleEmpty')}
+                    </Text>
                 )}
             </ScrollView>
+
+            {/* Bottom-sheet picker bahan */}
+            <IngredientPicker
+                visible={pickerVisible}
+                items={ingredientItems}
+                selected={selectedIngredients}
+                onToggle={toggleIngredient}
+                onSelectAll={handleSelectAll}
+                onClear={handleClearAll}
+                onGenerate={handleGenerateRecipes}
+                onClose={() => setPickerVisible(false)}
+            />
         </View>
     );
 }
@@ -202,28 +206,38 @@ const styles = StyleSheet.create({
     headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
     headerTitle: { fontSize: 26, fontWeight: '900', color: '#1e293b' },
     headerSubtitle: { fontSize: 14, color: '#64748b', lineHeight: 20, maxWidth: '90%', fontWeight: '500' },
-    
+
     content: { padding: 24, paddingBottom: 120 },
-    
-    selectionSection: { marginBottom: 30 },
-    selectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    selectionTitle: { fontSize: 13, fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: 1 },
-    selectionActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    actionText: { fontSize: 12, fontWeight: '700', color: '#8e44ad' },
-    divider: { width: 1, height: 12, backgroundColor: '#e2e8f0' },
-    
-    chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8, boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)', elevation: 2 },
-    chipSelected: { backgroundColor: '#f5f3ff', borderColor: '#8e44ad', borderWidth: 1.5 },
-    checkbox: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
-    checkboxSelected: { backgroundColor: '#8e44ad', borderColor: '#8e44ad' },
-    chipText: { fontSize: 14, fontWeight: '600', color: '#475569' },
-    chipTextSelected: { color: '#5b21b6', fontWeight: '700' },
-    
-    generateBtn: { flexDirection: 'row', backgroundColor: '#8e44ad', paddingVertical: 18, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 32, boxShadow: '0 8px 15px rgba(142, 68, 173, 0.25)', elevation: 8 },
-    generateBtnText: { color: '#fff', fontSize: 17, fontWeight: '800' },
-    
-    recipeList: { gap: 20 },
+
+    entryCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 18,
+        borderWidth: 1.5,
+        borderColor: '#ede9fe',
+        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
+        elevation: 3,
+    },
+    entryIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#f5f3ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    entryTextWrap: { flex: 1 },
+    entryTitle: { fontSize: 17, fontWeight: '800', color: '#5b21b6' },
+    entrySubtitle: { fontSize: 13, color: '#94a3b8', marginTop: 3 },
+
+    emptyIngredients: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+    emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+    emptyText: { color: '#94a3b8', fontSize: 14, textAlign: 'center', lineHeight: 22, fontWeight: '500' },
+
+    recipeList: { gap: 20, marginTop: 28 },
     recipeCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#f1f5f9', boxShadow: '0 4px 10px rgba(0, 0, 0, 0.06)', elevation: 3 },
     recipeHeader: { marginBottom: 12 },
     recipeTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
@@ -233,8 +247,23 @@ const styles = StyleSheet.create({
     metaText: { fontSize: 12, color: '#475569', fontWeight: '700' },
     viewRecipeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderTopWidth: 1.5, borderColor: '#f8fafc', paddingTop: 16, marginTop: 4 },
     viewRecipeText: { fontSize: 15, fontWeight: '800', color: '#8e44ad' },
-    
-    emptyState: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
-    emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    emptyText: { color: '#94a3b8', fontSize: 14, textAlign: 'center', lineHeight: 22, fontWeight: '500' }
+
+    hintText: { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20, marginTop: 28, paddingHorizontal: 16 },
+
+    loadingCard: {
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        paddingVertical: 40,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.05)',
+        elevation: 2,
+    },
+    loadingText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#64748b',
+        marginTop: 16,
+    },
 });
